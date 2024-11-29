@@ -28,7 +28,7 @@ setup(
     url="http://github.com/thismatters/django-ctb/",
     packages=find_packages(exclude=("tests", "test_project")),
     include_package_data=True,
-    python_requires=">=3.9",
+    python_requires=">=3.10",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Environment :: Web Environment",
@@ -41,7 +41,6 @@ setup(
         "Operating System :: OS Independent",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
