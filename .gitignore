@@ -1,0 +1,15 @@
+**/__pycache__/
+*.pyc
+
+.pytest_cache
+
+.env
+*.csv*
+*.sqlite3
+.coverage
+.tox
+coverage.xml
+
+
+**/scrapes/
+*.egg-info

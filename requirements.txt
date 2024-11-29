@@ -1,0 +1,29 @@
+# Requirements for test_project
+
+Django==5.0.6
+
+pydantic==2.7.4
+
+requests==2.32.3
+
+# background tasks
+dramatiq[redis, watch]==1.17.0
+django-dramatiq==0.11.6
+
+# code quality
+ruff==0.8.0
+
+# testing
+pytest==8.2.2
+pytest-cov==5.0.0
+pytest-django==4.8.0
+
+# matrix testing
+tox==4.11.3
+
+# UML diagram generation
+django-extensions==3.2.3
+pygraphviz==1.11
+
+# needed for django_ctb
+django-enumfield==3.1
