@@ -1,7 +1,8 @@
 Django Clear To Build (ctb)
 ===========================
 
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/thismatters/django-mailinglist/test.yml?branch=main&color=156741&label=CI&logo=github&style=for-the-badge)](https://github.com/thismatters/django-mailinglist/actions)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/thismatters/django-ctb/test.yml?branch=main&color=156741&label=CI&logo=github&style=for-the-badge)](https://github.com/thismatters/django-ctb/actions)
+[![Codecov](https://img.shields.io/codecov/c/github/thismatters/django-ctb?color=156741&logo=codecov&logoColor=ffffff&style=for-the-badge)](https://codecov.io/gh/thismatters/django-ctb)
 
 `django-ctb` is a package for tracking inventory for small-scale electronics manufacturing.
 It tracks parts, vendors, orders, inventories (the parts that you have on-hand), projects across several versions (and their bills of materials, including cost breakdowns), and finally provides clearance to build---indicating that your inventory of parts is sufficient to complete the project build.
