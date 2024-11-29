@@ -28,7 +28,7 @@ setup(
     url="http://github.com/thismatters/django-ctb/",
     packages=find_packages(exclude=("tests", "test_project")),
     include_package_data=True,
-    python_requires=">=3.10",
+    python_requires=">=3.9",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Environment :: Web Environment",
