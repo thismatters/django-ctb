@@ -136,7 +136,13 @@ class ProjectBuildService:
                 )
             )
         consolodated_project_parts: dict[int, int] = {}
+        excluded_project_part_pks = build.excluded_project_parts.all().values_list(
+            "pk", flat=True
+        )
         for project_part in build.project_version.project_parts.all():
+            if project_part.pk in excluded_project_part_pks:
+                # Do not count this project part, it has been excluded from the build
+                continue
             _pk = project_part.part.pk
             consolodated_project_parts.setdefault(
                 _pk, {"part": project_part.part, "quantity": 0}
@@ -238,18 +244,12 @@ class ProjectBuildService:
         build.save()
 
     def cancel_build(self, build_pk):
-        try:
-            build = (
-                models.ProjectBuild.objects.filter(completed__isnull=True)
-                # .select_related("part_reservations")
-                .prefetch_related("part_reservations").get(pk=build_pk)
-            )
-        except models.ProjectBuild.DoesNotExist:
-            raise
-        try:
-            return self._cancel_build(build)
-        except:
-            return
+        build = (
+            models.ProjectBuild.objects.filter(completed__isnull=True)
+            # .select_related("part_reservations")
+            .prefetch_related("part_reservations").get(pk=build_pk)
+        )
+        return self._cancel_build(build)
 
 
 class BillOfMaterialsRow(BaseModel):
@@ -260,6 +260,7 @@ class BillOfMaterialsRow(BaseModel):
     footprint_name: str = Field(alias="Footprint")
     vendor_name: str | None = Field(alias="Vendor", default=None)
     item_number: str | None = Field(alias="PartNum", default=None)
+    optional: bool = Field(alias="Optional", default=False)
 
     @property
     def symbols(self):
@@ -375,7 +376,11 @@ class ProjectVersionBomService:
 
     def _sync_row(self, *, row, project_version):
         _part = self._get_part(row=row)
-        defaults = {"part": _part, "quantity": row.quantity}
+        defaults = {
+            "part": _part,
+            "quantity": row.quantity,
+            "is_optional": row.optional,
+        }
         if _part is None:
             defaults.update({"missing_part_description": f"{row}"})
         project_part, _ = models.ProjectPart.objects.update_or_create(

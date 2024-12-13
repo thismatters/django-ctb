@@ -183,13 +183,21 @@ def project_version(db, project):
 def project_part_factory(db, part_factory):
     parts = []
 
-    def _factory(part, project_version, line_number=1, quantity=2, is_implicit=False):
+    def _factory(
+        part,
+        project_version,
+        line_number=1,
+        quantity=2,
+        is_implicit=False,
+        is_optional=False,
+    ):
         part = m.ProjectPart.objects.create(
             part=part,
             project_version=project_version,
             line_number=line_number,
             quantity=quantity,
             is_implicit=is_implicit,
+            is_optional=is_optional,
         )
         parts.append(part)
         return part

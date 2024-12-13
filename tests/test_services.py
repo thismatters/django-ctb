@@ -157,6 +157,15 @@ class TestProjectBuildService:
         with pytest.raises(m.ProjectBuild.DoesNotExist):
             s.ProjectBuildService().clear_to_build(build.pk)
 
+    def test_clear_to_build__insufficient_inventory(self, build, monkeypatch):
+        def fake_clear_to_build(self, _build):
+            raise s.ProjectBuildService.InsufficientInventory(lacking=[])
+
+        monkeypatch.setattr(
+            s.ProjectBuildService, "_clear_to_build", fake_clear_to_build
+        )
+        assert s.ProjectBuildService().clear_to_build(build.pk) == []
+
     def test__clear_to_build(self, project_part, build, inventory_line_factory):
         _line = inventory_line_factory(part=project_part.part, quantity=10)
         s.ProjectBuildService()._clear_to_build(build)
@@ -203,6 +212,33 @@ class TestProjectBuildService:
         )
         _line.refresh_from_db()
         assert _line.quantity == 10
+
+    def test__clear_to_build__excluded_part(
+        self,
+        project_part,
+        build,
+        project_part_factory,
+        part,
+        part_factory,
+        inventory_line_factory,
+    ):
+        _line = inventory_line_factory(part=project_part.part, quantity=10)
+        excluded_part = part_factory(name="omitted", symbol="O")
+        excluded_project_part = project_part_factory(
+            part=excluded_part,
+            project_version=build.project_version,
+            line_number=2,
+            quantity=1,
+            is_optional=True,
+        )
+        build.excluded_project_parts.add(excluded_project_part)
+        reservations = s.ProjectBuildService()._clear_to_build(build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.inventory_line.part == part
+        build.excluded_project_parts.clear()
+        s.ProjectBuildPartReservationService().delete_reservations(
+            build.part_reservations.all()
+        )
 
     def test__complete_build(self, project_part, build, inventory_line_factory):
         _line = inventory_line_factory(part=project_part.part, quantity=10)
@@ -280,6 +316,56 @@ class TestProjectBuildService:
     def test_complete_build_bad(self, build, monkeypatch):
         with pytest.raises(m.ProjectBuild.DoesNotExist):
             s.ProjectBuildService().complete_build(1234)
+
+    def test_cancel_build(self, build, monkeypatch):
+        call_count = 0
+
+        def fake__cancel_build(self, _build):
+            nonlocal call_count
+            call_count += 1
+
+        monkeypatch.setattr(s.ProjectBuildService, "_cancel_build", fake__cancel_build)
+        s.ProjectBuildService().cancel_build(build.pk)
+        assert call_count == 1
+
+    def test_cancel_build__no(self, build, monkeypatch):
+        call_count = 0
+
+        def fake__cancel_build(self, _build):
+            nonlocal call_count
+            call_count += 1
+
+        monkeypatch.setattr(s.ProjectBuildService, "_cancel_build", fake__cancel_build)
+        s.ProjectBuildService().cancel_build(build.pk)
+        assert call_count == 1
+
+    def test__cancel_build(self, build, inventory_line_factory, part):
+        _line = inventory_line_factory(part=part, quantity=10)
+        reservations = s.ProjectBuildService()._clear_to_build(build)
+        build.refresh_from_db()
+        assert build.cleared is not None
+        _line.refresh_from_db()
+        assert _line.quantity == 4
+        s.ProjectBuildService()._cancel_build(build)
+        _line.refresh_from_db()
+        assert _line.quantity == 10
+        build.refresh_from_db()
+        assert build.cleared is None
+
+    def test__cancel_build__completed(self, build, monkeypatch):
+        def fake_delete_reservations(self, _build):
+            assert False
+
+        monkeypatch.setattr(
+            s.ProjectBuildPartReservationService,
+            "delete_reservations",
+            fake_delete_reservations,
+        )
+        build.completed = timezone.now()
+        build.save()
+        s.ProjectBuildService()._cancel_build(build)
+        build.refresh_from_db()
+        assert build.completed is not None
 
 
 class TestBillOfMaterialsRow:

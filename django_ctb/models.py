@@ -262,12 +262,20 @@ class ProjectPart(models.Model):
     line_number = models.SmallIntegerField()
     quantity = models.SmallIntegerField()
     is_implicit = models.BooleanField(default=False)
+    is_optional = models.BooleanField(default=False)
 
     @property
     def line_cost(self):
+        if self.part is None:
+            return 0
         return self.part.unit_cost * self.quantity
 
     # derived field for footprint refs?
+    def __str__(self):
+        _part = f"line {self.line_number} (part missing)"
+        if self.part is not None:
+            _part = str(self.part)
+        return f"{_part} for {self.project_version}"
 
 
 class ProjectPartFootprintRef(models.Model):
@@ -286,6 +294,10 @@ class ProjectBuild(models.Model):
     created = models.DateTimeField(default=timezone.now)
     cleared = models.DateTimeField(null=True, blank=True)
     completed = models.DateTimeField(null=True, blank=True)
+    excluded_project_parts = models.ManyToManyField(
+        ProjectPart,
+        blank=True,
+    )
 
     def __str__(self):  # pragma: no cover
         return f"{self.quantity}x {self.project_version}"

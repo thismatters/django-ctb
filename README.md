@@ -162,14 +162,19 @@ The fundamental actions that those services provide are described below, each of
 ## Housekeeping
 
 ### TODO
+- Where tf did the BOM view go???
+- Document workflows -- flowcharts for:
+  - Create new project
+  - Figuring out what part to use for a design
+
 - make BOM accessible from the clear to build screen
 - Clear to build should remove any prior shortfalls
 - Picking order/picking aide (inventory locations?)
 - Generate vendor order objects from clear to build page
 - Generate shopping carts from vendor orders (may have to introspect on how to add items to cart in Tayda with Charlesproxy)
 
-
 - Start designing frontend!
+  - Minimal means to create a Mouser Part (mouser part number, Symbol (e.g. "U"), Footprint)
   - Project index
     - breakdown of versions
       - BOM link

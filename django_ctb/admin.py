@@ -133,7 +133,7 @@ class ProjectBuildInline(admin.TabularInline):
 
 
 class MissingPartInline(admin.TabularInline):
-    fields = ("part", "missing_part_description")
+    fields = ("part", "is_optional", "missing_part_description")
     model = models.ProjectPart
     extra = 0
 
@@ -203,7 +203,7 @@ class ProjectVersionAdmin(admin.ModelAdmin):
     def bom_view(self, request, object_id):
         return render(
             request,
-            "admin/inventory/project_version_bom.html",
+            "admin/django_ctb/project_version_bom.html",
             {"project_version": self._getobj(request, object_id)},
         )
 
@@ -240,6 +240,20 @@ class ProjectBuildAdmin(admin.ModelAdmin):
     date_hierarchy = "created"
     inlines = [ProjectBuildPartShortageInline]
     actions = ("_clear_to_build", "_complete_build", "_cancel_build")
+
+    def get_form(self, request, obj, **kwargs):
+        self.obj = obj
+        print(self.obj)
+        return super().get_form(request, obj, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "excluded_project_parts" and self.obj is not None:
+            print(self.obj.project_version)
+            kwargs["queryset"] = models.ProjectPart.objects.filter(
+                project_version=self.obj.project_version,
+                is_optional=True,
+            )
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def _clear_to_build(self, request, queryset):
         for row in queryset:

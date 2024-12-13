@@ -27,9 +27,14 @@
   {% for project_part in project_version.project_parts.all|dictsort:"line_number" %}
     <tr>
       <td>{{ project_part.line_number }}</td>
-      <td>{{ project_part.quantity }}</td>
-      <td>{{ project_part.part }}</td>
-      <td>{{ project_part.part.unit_cost }}</td>
+      <td>{{ project_part.quantity }}{% if project_part.is_optional %}*{% endif %}</td>
+      {% if project_part.part != None %}
+        <td>{{ project_part.part }}</td>
+        <td>{{ project_part.part.unit_cost }}</td>
+      {% else %}
+        <td>Part not found!</td>
+        <td>-</td>
+      {% endif %}
       <td>{{ project_part.line_cost }}</td>
     </tr>
   {% endfor %}
@@ -37,5 +42,9 @@
     <td colspan="4">Total:</td>
     <td>{{ project_version.total_cost|floatformat:2 }}</td>
   </tr>
+  <tr>
+    <td colspan="5">(*) Marked parts are optional</td>
+  </tr>
 </table>
+
 {% endblock %}

@@ -379,6 +379,26 @@ class LedScraper(TaydaScraper):
     name_regex = re.compile(r"(?P<value>LED) 3mm [\w]+")
 
 
+class ZenerDiodeScraper(TaydaScraper):
+    """TZMB13-GS08 Small Signal Zener Diodes 5mA 13V"""
+
+    name = "Zener Diode"
+    symbol = "Z"
+    package_name = "MiniMELF"
+    name_accept = re.compile(r"^[\w\d]*-GS08 .*$")
+    name_regex = re.compile(
+        r"^[\w\d]*-GS08 Small Signal Zener Diodes "
+        r"(?P<loading_limit>[\d/.]+[um]A)\s?"
+        r"(?P<value>[\d.]*?V)",
+        re.I,
+    )
+
+    def massage_item_data(self, item_data):
+        _data = super().massage_item_data(item_data)
+        _data["value"] = "Zener " + _data["value"]
+        return _data
+
+
 class Command(BaseCommand):
     help = "Scrape selected set of Tayda Electronics pages to populate parts and vendor parts"
     base_url = "https://www.taydaelectronics.com"
@@ -391,7 +411,8 @@ class Command(BaseCommand):
             name="Tayda", base_url=self.base_url
         )
         pages = {
-            "/potentiometer-variable-resistors/cermet-potentiometers/3006p.html": Cermet3006PTrimmerScraper,
+            "/diodes/zener.html": ZenerDiodeScraper,
+            # "/potentiometer-variable-resistors/cermet-potentiometers/3006p.html": Cermet3006PTrimmerScraper,
             # "/potentiometer-variable-resistors/cermet-potentiometers/3296w.html": CermetTrimmerScraper,
             # "/capacitors/smd-ceramic-chip-capacitors/0805.html": SmdCapacitorScraper,
             # "/capacitors/smd-ceramic-chip-capacitors/0603.html": Smd0603CapacitorScraper,
