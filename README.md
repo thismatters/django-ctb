@@ -97,6 +97,8 @@ Requires a commit ref (commit hash or tag) which can be found in the project, an
 Upon `sync`ing (described below), the parts represented on the bill of materials will be associated to the project.
 Each footprint ref (e.g. `R12` and `C3`) that appears in the bill of materials will be represented.
 
+`ProjectPart` may be marked as "optional" (via the `is_optional` attribute), indicating that they may be excluded from a `ProjectBuild`
+
 #### ImplicitProjectPart
 
 Sometimes there are parts which don't appear on the bill of materials but that will be included in the final project. An example is the knobs are added to the potentiometer, and the bezels for the LEDs. They're not electrical components, but they are needed for a complete build.
@@ -107,6 +109,8 @@ Parts like these can be associated to a given `Package` and will be included in 
 
 Represents a manufacturing run of a project version.
 Specify the number of instances of the project version that you will build.
+
+Any `ProjectPart`s which were marked "optional" may be added to the `excluded_project_parts`. When added, these project parts will not be omitted from clearing actvities.
 
 When `cleared` (described below), the parts needed to build the lot will be reserved from the inventory.
 When `completed` these reservations will be utilized.
