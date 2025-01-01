@@ -68,8 +68,10 @@ class PartSatisfaction:
         self.fulfillments = self.calculate_fulfillment()
 
     def calculate_fulfillment(self) -> list[InventoryLineFulfillment]:
+        _equivalents = list(self.part.equivalents.all())
+        _equivalents.append(self.part)
         inventory_lines = models.InventoryLine.objects.filter(
-            part=self.part, is_deprioritized=False
+            part__in=_equivalents, is_deprioritized=False
         ).order_by("quantity")
         needed_lines = []
         for inventory_line in inventory_lines:

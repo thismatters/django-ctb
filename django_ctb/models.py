@@ -86,6 +86,13 @@ class Part(models.Model):
     )
     vendors = models.ManyToManyField(Vendor, related_name="parts", through="VendorPart")
     _is_scraped = models.BooleanField(default=False)
+    equivalent_to = models.ForeignKey(
+        "Part",
+        on_delete=models.SET_NULL,
+        related_name="equivalents",
+        null=True,
+        blank=True,
+    )
 
     def __str__(self):  # pragma: no cover
         return f"{self.name} {self.symbol} {self.value} -- {self.package}"
