@@ -458,56 +458,74 @@ class ProjectVersionBomService:
         return self._sync(project_version)
 
 
-@dataclass
 class PartUsage:
-    part: models.Part
-    inventory_line_pks: list[int]
-    total: int = 0
-    actions: int = 0
-    amort: int = 0
-    in_stock: int = 0
+    horizon_days = 90
+    horizon_lookback = 3
+
+    def __init__(self, part: models.Part):
+        self.part = part
+        self.total_used: int = 0
+        self.action_count: int = 0
+        self.amortized_usage: float = 0
+        self.rolling_horizon_usage: float = 0
+        self.in_stock: int = 0
+        self._tabulate_usage()
+
+    def _tabulate_usage(self):
+        # reset just in case this is somehow run a second time...
+        self.total_used = 0
+        self.action_count = 0
+        self.amortized_usage = 0
+        self.in_stock = 0
+        self.rolling_horizon_usage = 0
+        _now = timezone.now()
+        horizon_bins = {}
+        for inventory_line in self.part.inventory_lines.filter(is_deprioritized=False):
+            self.in_stock += inventory_line.quantity
+            for action in inventory_line.inventory_actions.all():
+                if action.delta > 0:
+                    continue
+                qty = -1 * action.delta
+                self.total_used += qty
+                self.action_count += 1
+                ### Simple amortization
+                days_since = (_now - action.created).total_seconds() / (3600 * 24)
+                self.amortized_usage += qty / days_since
+                ### Bin usage by distance from planning horizon
+                horizon_bin = days_since // self.horizon_days
+                horizon_bins.setdefault(horizon_bin, 0)
+                horizon_bins[horizon_bin] += qty
+        # process rolling horizon
+        _buff = 0
+        for _bin in range(self.horizon_lookback):
+            _buff += horizon_bins.get(_bin, 0)
+            self.rolling_horizon_usage += _buff / ((_bin + 1) * self.horizon_lookback)
+
+    @property
+    def order_priority(self):
+        # return self.amortized_usage / max(0.1, self.in_stock)
+        return self.rolling_horizon_usage / max(0.1, self.in_stock)
+
+    def sort_key(self):
+        return (self.order_priority, self.total_used, self.action_count)
 
 
 class PartAnalyticsService:
     def find_low_stock_parts(self):
-        _now = timezone.now()
-        part_usage: dict[int, PartUsage] = {}
-        for inventory_line in models.InventoryLine.objects.filter(
-            is_deprioritized=False
-        ):
+        part_usages: list[PartUsage] = []
+        for part in models.Part.objects.all():
             # collect rate of usage
-            part_usage.setdefault(
-                inventory_line.part.pk,
-                PartUsage(part=inventory_line.part, inventory_line_pks=[]),
-            )
-            _usage = part_usage[inventory_line.part.pk]
-            _usage.in_stock += inventory_line.quantity
-            _usage.inventory_line_pks.append(inventory_line.pk)
-            for action in inventory_line.inventory_actions.all():
-                days_since = (_now - action.created).total_seconds() / (3600 * 24)
-                if action.delta > 0:
-                    continue
-                qty = -1 * action.delta
-                _usage.total += qty
-                _usage.actions += 1
-                _usage.amort += qty / days_since
-
-        for usage in sorted(
-            part_usage.values(),
-            key=lambda x: (x.amort / max(0.1, x.in_stock), x.total, x.actions),
-            reverse=True,
-        ):
-            if usage.actions == 0:
-                continue
-            if usage.amort / max(0.1, usage.in_stock) < 5:
+            part_usages.append(PartUsage(part=part))
+        for usage in sorted(part_usages, key=lambda x: x.sort_key, reverse=True):
+            if usage.action_count == 0:
                 continue
             print(
                 usage.part.pk,
+                usage.order_priority,
                 usage.part.name,
                 usage.part.value,
-                usage.part.part_vendors.all().values_list("item_number", flat=True),
-                usage.amort / max(0.1, usage.in_stock),
-                usage.actions,
-                usage.total,
                 usage.in_stock,
+                usage.part.part_vendors.all().values_list("item_number", flat=True),
+                usage.actions,
+                usage.total_used,
             )

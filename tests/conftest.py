@@ -1,9 +1,10 @@
 import pytest
-
-from django_ctb import models as m
+import datetime
 
 import dramatiq
-import pytest
+from django.utils import timezone
+
+from django_ctb import models as m
 
 
 @pytest.fixture
@@ -155,6 +156,25 @@ def inventory_line_factory(db, inventory):
 
     yield _factory
     [l.delete() for l in lines]
+
+
+@pytest.fixture
+def inventory_action_factory(db):
+    resources = []
+
+    def _factory(*, inventory_line, delta, days_ago=None, **kwargs):
+        if days_ago is not None:
+            kwargs["created"] = timezone.now() - datetime.timedelta(days=days_ago)
+        resource = m.InventoryAction.objects.create(
+            inventory_line=inventory_line,
+            delta=delta,
+            **kwargs,
+        )
+        resources.append(resource)
+        return resource
+
+    yield _factory
+    [r.delete() for r in resources]
 
 
 @pytest.fixture
