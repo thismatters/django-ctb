@@ -29,7 +29,7 @@ class TestVendorOrderService:
         action.delete()
         inventory_line.delete()
 
-    def test__complete_order_line_existing_inventory(
+    def test__complete_order_line__existing_inventory(
         self, vendor_order_line_factory, vendor_part, inventory_line_factory
     ):
         inventory_line = inventory_line_factory(part=vendor_part.part, quantity=3)
@@ -275,7 +275,7 @@ class TestProjectBuildService:
         assert build.completed is not None
         reservation.delete()
 
-    def test__complete_build_no(
+    def test__complete_build__no_build(
         self, project_part, build, inventory_line_factory, monkeypatch
     ):
         _line = inventory_line_factory(part=project_part.part, quantity=2)
@@ -297,7 +297,7 @@ class TestProjectBuildService:
         assert build.completed is None
         assert call_count == 1
 
-    def test__complete_build_already_completed(self, build, monkeypatch):
+    def test__complete_build__already_completed(self, build, monkeypatch):
         build.completed = timezone.now()
         build.save()
 
@@ -333,7 +333,7 @@ class TestProjectBuildService:
         s.ProjectBuildService().complete_build(build.pk)
         assert call_count == 1
 
-    def test_complete_build_bad(self, build, monkeypatch):
+    def test_complete_build__bad(self, build, monkeypatch):
         with pytest.raises(m.ProjectBuild.DoesNotExist):
             s.ProjectBuildService().complete_build(1234)
 
@@ -516,7 +516,7 @@ class TestMouserPartService:
 
 
 class TestProjectVersionBomService:
-    def test_get_vendor_part(self, vendor_part):
+    def test__get_vendor_part(self, vendor_part):
         _vendor_part = s.ProjectVersionBomService()._get_vendor_part(
             row=s.BillOfMaterialsRow(
                 **{
@@ -532,23 +532,23 @@ class TestProjectVersionBomService:
         )
         assert _vendor_part == vendor_part
 
-    def test_get_vendor_part_missing(self, vendor_part):
-        _vendor_part = s.ProjectVersionBomService()._get_vendor_part(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "D1, D2",
-                    "Qty": 2,
-                    "PartNum": vendor_part.item_number,
-                    "Vendor": "nothing",
-                    "Value": "LED",
-                    "Footprint": "asdf6789",
-                }
-            ),
-        )
-        assert _vendor_part is None
+    def test__get_vendor_part__missing(self, vendor_part):
+        with pytest.raises(s.MissingVendorPart):
+            _vendor_part = s.ProjectVersionBomService()._get_vendor_part(
+                row=s.BillOfMaterialsRow(
+                    **{
+                        "#": 1,
+                        "Reference": "D1, D2",
+                        "Qty": 2,
+                        "PartNum": vendor_part.item_number,
+                        "Vendor": "nothing",
+                        "Value": "LED",
+                        "Footprint": "asdf6789",
+                    }
+                ),
+            )
 
-    def test_get_vendor_part_missing_mouser(self, vendor_part_mouser, monkeypatch):
+    def test__get_vendor_part__missing_mouser(self, vendor_part_mouser, monkeypatch):
         def fake_create_vendor_part(self, row):
             return vendor_part_mouser
 
@@ -570,7 +570,7 @@ class TestProjectVersionBomService:
         )
         assert _vendor_part == vendor_part_mouser
 
-    def test_get_matching_parts(self, part_factory, footprint):
+    def test__get_matching_parts(self, part_factory, footprint):
         green_led = part_factory(name="LED Green", value="LED", symbol="D")
         white_led = part_factory(name="LED White", value="LED", symbol="D")
         parts = s.ProjectVersionBomService()._get_matching_parts(
@@ -589,7 +589,7 @@ class TestProjectVersionBomService:
         assert green_led in parts
         assert white_led in parts
 
-    def test_get_matching_parts_discriminating(self, part_factory, footprint):
+    def test__get_matching_parts__discriminating(self, part_factory, footprint):
         log_pot = part_factory(name="Spinny Boi Pot", value="A100K", symbol="RV")
         lin_pot = part_factory(name="Spinny Boi Pot", value="B100K", symbol="RV")
         parts = s.ProjectVersionBomService()._get_matching_parts(
@@ -608,7 +608,7 @@ class TestProjectVersionBomService:
         assert lin_pot in parts
         assert log_pot not in parts
 
-    def test_get_matching_parts_quantity_sorting(
+    def test__get_matching_parts__quantity_sorting(
         self, part_factory, footprint, inventory_line_factory
     ):
         green_led = part_factory(name="LED Green", value="LED", symbol="D")
@@ -642,7 +642,7 @@ class TestProjectVersionBomService:
             elif part == purple_led:
                 assert part.qty_in_inventory == 22
 
-    def test_get_matching_parts_deprioritized(
+    def test__get_matching_parts__deprioritized(
         self, part_factory, footprint, inventory_line_factory
     ):
         green_led = part_factory(name="LED Green", value="LED", symbol="D")
@@ -664,7 +664,7 @@ class TestProjectVersionBomService:
         )
         assert white_led not in parts
 
-    def test_get_part_vendor_part(self, monkeypatch, vendor_part):
+    def test__get_part__vendor_part(self, monkeypatch, vendor_part):
         call_count = 0
 
         def fake_get_vendor_part(self, *, row):
@@ -693,7 +693,7 @@ class TestProjectVersionBomService:
         assert call_count == 1
         assert part == vendor_part.part
 
-    def test_get_part_regular(self, monkeypatch, part_queryset, part):
+    def test__get_part__regular(self, monkeypatch, part_queryset, part):
         call_count = 0
 
         def fake_get_matching_part(self, *, row):
@@ -723,7 +723,7 @@ class TestProjectVersionBomService:
         assert call_count == 1
         assert _part == part
 
-    def test_get_part_missing(self, monkeypatch):
+    def test__get_part__missing(self, monkeypatch):
         call_count = 0
 
         def fake_get_matching_part(self, *, row):
@@ -753,11 +753,11 @@ class TestProjectVersionBomService:
         assert call_count == 1
         assert _part is None
 
-    def test_build_bom_url(self, project_version):
+    def test__build_bom_url(self, project_version):
         ret = s.ProjectVersionBomService()._build_bom_url(project_version)
         assert ret == "https://gitbub.com/fake/fake/raw/v0/nested/deep/test.csv"
 
-    def test_sync_footprints(self, project_part):
+    def test__sync_footprints(self, project_part):
         _old_footprint_ref = m.ProjectPartFootprintRef.objects.create(
             project_part=project_part,
             footprint_ref="F2",
@@ -775,7 +775,7 @@ class TestProjectVersionBomService:
         assert _old_footprint_ref2 in refs
         assert "F1" in refs.values_list("footprint_ref", flat=True)
 
-    def test_sync_implicit_parts(
+    def test__sync_implicit_parts(
         self,
         project_version,
         part,
@@ -798,7 +798,7 @@ class TestProjectVersionBomService:
         assert pp.line_number == project_part.line_number
         pp.delete()
 
-    def test_sync_implicit_parts_remove_old(
+    def test__sync_implicit_parts__remove_old(
         self,
         project_version,
         part,
@@ -831,7 +831,7 @@ class TestProjectVersionBomService:
             old_project_part.refresh_from_db()
         pp.delete()
 
-    def test_sync_implicit_parts_update(
+    def test__sync_implicit_parts__update(
         self,
         project_version,
         part,
@@ -863,7 +863,7 @@ class TestProjectVersionBomService:
         assert pp == old_project_part
         pp.delete()
 
-    def test_sync_implicit_parts_multiple(
+    def test__sync_implicit_parts__multiple(
         self,
         project_version,
         part,
@@ -912,7 +912,7 @@ class TestProjectVersionBomService:
         assert opp.quantity == 4
         opp.delete()
 
-    def test_sync_row(self, project_version, part, monkeypatch):
+    def test__sync_row(self, project_version, part, monkeypatch):
         _row = s.BillOfMaterialsRow(
             **{
                 "#": 1,
@@ -986,7 +986,7 @@ class TestProjectVersionBomService:
         assert len(_project_parts) == 1
         assert _real_project_part in _project_parts
 
-    def test__sync_missing_part(
+    def test__sync__missing_part(
         self, project_version, monkeypatch, project_part_factory, part
     ):
         class Closable:

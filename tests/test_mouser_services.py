@@ -46,7 +46,7 @@ class TestMouserService:
         MouserService().populate(vendor_part_mouser.pk)
         assert call_count == 1
 
-    def test_populate_missing(self, db, monkeypatch):
+    def test_populate__missing(self, db, monkeypatch):
         call_count = 0
 
         def fake__populate(self, vendor_part):
@@ -58,7 +58,7 @@ class TestMouserService:
         MouserService().populate(123)
         assert call_count == 0
 
-    def test__create_missing_part(self, monkeypatch):
+    def test__create__missing_part(self, monkeypatch):
         def fake_client_get_part(*args, **kwargs):
             raise MouserClient.EmptyResponse
 
