@@ -4,7 +4,7 @@ import io
 import logging
 import zipfile
 from contextlib import closing
-
+from dataclasses import dataclass
 from django.db.models import Sum
 from django.utils import timezone
 from pydantic import BaseModel, Field, field_validator, AliasChoices
@@ -284,6 +284,10 @@ class BillOfMaterialsRow(BaseModel):
         return [v.strip() for v in value.split(",") if v.strip()]
 
 
+class MissingVendorPart(Exception):
+    pass
+
+
 class ProjectVersionBomService:
     """Downloads BOM from repo at specified commit and creates project
     parts for each line."""
@@ -306,7 +310,9 @@ class ProjectVersionBomService:
                     row=row,
                 )
             else:
-                return None
+                raise MissingVendorPart(
+                    f"Vendor Part not found {row.vendor_name}: {row.item_number}"
+                )
         return vendor_part
 
     def _get_matching_parts(self, *, row):
@@ -375,7 +381,11 @@ class ProjectVersionBomService:
         ).delete()
 
     def _sync_row(self, *, row, project_version):
-        _part = self._get_part(row=row)
+        _part = None
+        try:
+            _part = self._get_part(row=row)
+        except MissingVendorPart:
+            pass
         defaults = {
             "part": _part,
             "quantity": row.quantity,
@@ -444,3 +454,58 @@ class ProjectVersionBomService:
     def sync(self, project_version_pk):
         project_version = models.ProjectVersion.objects.get(pk=project_version_pk)
         return self._sync(project_version)
+
+
+@dataclass
+class PartUsage:
+    part: models.Part
+    inventory_line_pks: list[int]
+    total: int = 0
+    actions: int = 0
+    amort: int = 0
+    in_stock: int = 0
+
+
+class PartAnalyticsService:
+    def find_low_stock_parts(self):
+        _now = timezone.now()
+        part_usage: dict[int, PartUsage] = {}
+        for inventory_line in models.InventoryLine.objects.filter(
+            is_deprioritized=False
+        ):
+            # collect rate of usage
+            part_usage.setdefault(
+                inventory_line.part.pk,
+                PartUsage(part=inventory_line.part, inventory_line_pks=[]),
+            )
+            _usage = part_usage[inventory_line.part.pk]
+            _usage.in_stock += inventory_line.quantity
+            _usage.inventory_line_pks.append(inventory_line.pk)
+            for action in inventory_line.inventory_actions.all():
+                days_since = (_now - action.created).total_seconds() / (3600 * 24)
+                if action.delta > 0:
+                    continue
+                qty = -1 * action.delta
+                _usage.total += qty
+                _usage.actions += 1
+                _usage.amort += qty / days_since
+
+        for usage in sorted(
+            part_usage.values(),
+            key=lambda x: (x.amort / max(0.1, x.in_stock), x.total, x.actions),
+            reverse=True,
+        ):
+            if usage.actions == 0:
+                continue
+            if usage.amort / max(0.1, usage.in_stock) < 5:
+                continue
+            print(
+                usage.part.pk,
+                usage.part.name,
+                usage.part.value,
+                usage.part.part_vendors.all().values_list("item_number", flat=True),
+                usage.amort / max(0.1, usage.in_stock),
+                usage.actions,
+                usage.total,
+                usage.in_stock,
+            )

@@ -194,7 +194,9 @@ class InventoryLine(models.Model):
 
 
 class InventoryAction(models.Model):
-    inventory_line = models.ForeignKey(InventoryLine, on_delete=models.CASCADE)
+    inventory_line = models.ForeignKey(
+        InventoryLine, on_delete=models.CASCADE, related_name="inventory_actions"
+    )
     # what happened
     delta = models.IntegerField()
     # why did it happen (order fulfilled | project built | correction)
