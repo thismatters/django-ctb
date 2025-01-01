@@ -150,7 +150,7 @@ class TestProjectBuildService:
         s.ProjectBuildService().clear_to_build(build.pk)
         assert call_count == 1
 
-    def test_clear_to_build_no(self, build):
+    def test_clear_to_build__no_build(self, build):
         build.completed = timezone.now()
         build.save()
 
@@ -184,7 +184,7 @@ class TestProjectBuildService:
         _line.refresh_from_db()
         assert _line.quantity == 10
 
-    def test__clear_to_build_not(
+    def test__clear_to_build__not(
         self, project_part, vendor_part, build, inventory_line_factory
     ):
         _line = inventory_line_factory(part=project_part.part, quantity=1)
@@ -195,7 +195,7 @@ class TestProjectBuildService:
         assert build.shortfalls.all()[0].quantity == 5
         assert build.shortfalls.all()[0].part == project_part.part
 
-    def test__clear_to_build_accumulates_by_part(
+    def test__clear_to_build__accumulates_by_part(
         self, build, project_part_factory, inventory_line_factory, part
     ):
         _line = inventory_line_factory(part=part, quantity=10)
@@ -235,6 +235,26 @@ class TestProjectBuildService:
         reservations = s.ProjectBuildService()._clear_to_build(build)
         assert len(reservations) == 1
         assert reservations[0].inventory_action.inventory_line.part == part
+        build.excluded_project_parts.clear()
+        s.ProjectBuildPartReservationService().delete_reservations(
+            build.part_reservations.all()
+        )
+
+    def test__clear_to_build__equivalent_part(
+        self,
+        project_part,
+        build,
+        part,
+        part_factory,
+        inventory_line_factory,
+    ):
+        equivalent_part = part_factory(
+            name="equivalent", symbol="E", equivalent_to=part
+        )
+        _line = inventory_line_factory(part=equivalent_part, quantity=10)
+        reservations = s.ProjectBuildService()._clear_to_build(build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.inventory_line.part == equivalent_part
         build.excluded_project_parts.clear()
         s.ProjectBuildPartReservationService().delete_reservations(
             build.part_reservations.all()
