@@ -947,6 +947,32 @@ class TestProjectVersionBomService:
         assert len(_refs) == 0
         project_part.delete()
 
+    def test__sync_row__missing_vendor_part(self, project_version, monkeypatch):
+        _row = s.BillOfMaterialsRow(
+            **{
+                "#": 1,
+                "Reference": "A1, A2, A33, D12",
+                "#": 69,
+                "Qty": 420,
+                "PartNum": "real-part",
+                "Vendor": "AmazingVendor",
+                "Value": "asdf6789",
+                "Footprint": "asdf1234",
+            }
+        )
+
+        def fake_get_part(self, *, row):
+            raise s.MissingVendorPart
+
+        monkeypatch.setattr(s.ProjectVersionBomService, "_get_part", fake_get_part)
+        project_part = s.ProjectVersionBomService()._sync_row(
+            row=_row, project_version=project_version
+        )
+        assert project_part.project_version == project_version
+        assert project_part.part == None
+        assert project_part.missing_part_description is not None
+        project_part.delete()
+
     def test__sync(self, project_version, monkeypatch, project_part_factory, part):
         class Closable:
             def __init__(self, content):

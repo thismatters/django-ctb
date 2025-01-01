@@ -11,6 +11,12 @@ class TestPartModel:
         assert vendor_part.part.unit_cost == Decimal("0.0100")
 
 
+class TestProjectPartModel:
+    def test_line_cost__no_part(self, project_part_factory, project_version):
+        _project_part = project_part_factory(None, project_version, quantity=10)
+        assert _project_part.line_cost == 0
+
+
 class TestProjectVersionModel:
     def test_pcb_unit_cost_no_cost(self, project_version):
         project_version.pcb_cost = None

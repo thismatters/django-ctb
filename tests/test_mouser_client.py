@@ -11,7 +11,7 @@ class FakeResponse:
 
 
 class TestMouserClient:
-    def test_get_part_missing(self, monkeypatch):
+    def test_get_part__missing(self, monkeypatch):
         def fake_post(*args, **kwargs):
             return FakeResponse(
                 text="""{
@@ -27,12 +27,20 @@ class TestMouserClient:
         with pytest.raises(MouserClient.EmptyResponse):
             mouser_part = MouserClient().get_part("876-ASDFQWERZXCV")
 
-    def test_get_part_bad(self, monkeypatch):
+    def test_get_part__bad_response(self, monkeypatch):
         def fake_post(*args, **kwargs):
             return FakeResponse(text="bad", status_code=300)
 
         monkeypatch.setattr(requests, "post", fake_post)
         with pytest.raises(MouserClient.BadResponse):
+            mouser_part = MouserClient().get_part("876-ASDFQWERZXCV")
+
+    def test_get_part__bad_json(self, monkeypatch):
+        def fake_post(*args, **kwargs):
+            return FakeResponse(text='{"Errors": [], "BlearchResults": {}}')
+
+        monkeypatch.setattr(requests, "post", fake_post)
+        with pytest.raises(Exception):
             mouser_part = MouserClient().get_part("876-ASDFQWERZXCV")
 
     def test_get_part(self, monkeypatch):
