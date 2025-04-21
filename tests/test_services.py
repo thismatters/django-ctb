@@ -100,37 +100,47 @@ class TestVendorOrderService:
 
 
 class TestProjectBuildService:
-    def test_part_satisfaction_no_inventory(self, part):
-        satisfaction = s.PartSatisfaction(part=part, needed=2)
+    def test_part_satisfaction_no_inventory(self, part, project_part):
+        satisfaction = s.PartSatisfaction(
+            part=part, needed=2, project_part=project_part
+        )
         assert satisfaction.needed == 2
         assert satisfaction.unfulfilled == 2
         assert satisfaction.fulfillments == []
 
     def test_part_satisfaction_insufficient_inventory(
-        self, part, inventory_line_factory
+        self, part, inventory_line_factory, project_part
     ):
         _line = inventory_line_factory(part=part, quantity=1)
-        satisfaction = s.PartSatisfaction(part=part, needed=2)
+        satisfaction = s.PartSatisfaction(
+            part=part, needed=2, project_part=project_part
+        )
         assert satisfaction.needed == 2
         assert satisfaction.unfulfilled == 1
         assert satisfaction.fulfillments[0].inventory_line == _line
         assert satisfaction.fulfillments[0].depletion == 1
 
-    def test_part_satisfaction_sufficient_inventory(self, part, inventory_line_factory):
+    def test_part_satisfaction_sufficient_inventory(
+        self, part, inventory_line_factory, project_part
+    ):
         _other_line = inventory_line_factory(part=part, quantity=5)
         _line = inventory_line_factory(part=part, quantity=2)
-        satisfaction = s.PartSatisfaction(part=part, needed=2)
+        satisfaction = s.PartSatisfaction(
+            part=part, needed=2, project_part=project_part
+        )
         assert satisfaction.needed == 2
         assert satisfaction.unfulfilled == 0
         assert satisfaction.fulfillments[0].inventory_line == _line
         assert satisfaction.fulfillments[0].depletion == 2
 
     def test_part_satisfaction_sufficient_inventory_deprioritized(
-        self, part, inventory_line_factory
+        self, part, inventory_line_factory, project_part
     ):
         _other_line = inventory_line_factory(part=part, quantity=5)
         _line = inventory_line_factory(part=part, quantity=2, is_deprioritized=True)
-        satisfaction = s.PartSatisfaction(part=part, needed=2)
+        satisfaction = s.PartSatisfaction(
+            part=part, needed=2, project_part=project_part
+        )
         assert satisfaction.needed == 2
         assert satisfaction.unfulfilled == 0
         assert satisfaction.fulfillments[0].inventory_line == _other_line
@@ -251,6 +261,39 @@ class TestProjectBuildService:
         equivalent_part = part_factory(
             name="equivalent", symbol="E", equivalent_to=part
         )
+        _line = inventory_line_factory(part=equivalent_part, quantity=10)
+        reservations = s.ProjectBuildService()._clear_to_build(build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.inventory_line.part == equivalent_part
+        build.excluded_project_parts.clear()
+        s.ProjectBuildPartReservationService().delete_reservations(
+            build.part_reservations.all()
+        )
+
+    def test__clear_to_build__substitute_part(
+        self, project_part, build, part, part_factory, inventory_line_factory
+    ):
+        substitute_part = part_factory(name="sub", symbol="S")
+        project_part.substitute_part = substitute_part
+        project_part.save()
+        _line = inventory_line_factory(part=substitute_part, quantity=10)
+        reservations = s.ProjectBuildService()._clear_to_build(build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.inventory_line.part == substitute_part
+        build.excluded_project_parts.clear()
+        s.ProjectBuildPartReservationService().delete_reservations(
+            build.part_reservations.all()
+        )
+
+    def test__clear_to_build__equivalent_substitute_part(
+        self, project_part, build, part, part_factory, inventory_line_factory
+    ):
+        substitute_part = part_factory(name="sub", symbol="S")
+        equivalent_part = part_factory(
+            name="equivalent", symbol="E", equivalent_to=substitute_part
+        )
+        project_part.substitute_part = substitute_part
+        project_part.save()
         _line = inventory_line_factory(part=equivalent_part, quantity=10)
         reservations = s.ProjectBuildService()._clear_to_build(build)
         assert len(reservations) == 1

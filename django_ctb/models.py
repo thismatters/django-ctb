@@ -236,7 +236,7 @@ class ProjectVersion(models.Model):
     )
     bom_path = models.CharField(max_length=100)
     pcb_url = models.URLField(help_text="OSH park link to pcb", null=True, blank=True)
-    parts = models.ManyToManyField(Part, related_name="projects", through="ProjectPart")
+    # parts = models.ManyToManyField(Part, related_name="projects", through="ProjectPart")
     pcb_cost = models.DecimalField(
         decimal_places=2, max_digits=6, help_text="for lot of 3", null=True, blank=True
     )
@@ -264,6 +264,13 @@ class ProjectPart(models.Model):
         null=True,
         blank=True,
     )
+    substitute_part = models.ForeignKey(
+        Part,
+        on_delete=models.PROTECT,
+        related_name="substitute_project_part",
+        null=True,
+        blank=True,
+    )
     missing_part_description = models.CharField(max_length=256, null=True, blank=True)
     project_version = models.ForeignKey(
         ProjectVersion, on_delete=models.CASCADE, related_name="project_parts"
@@ -276,6 +283,8 @@ class ProjectPart(models.Model):
     @property
     def line_cost(self):
         if self.part is None:
+            return 0
+        if self.part.unit_cost is None:
             return 0
         return self.part.unit_cost * self.quantity
 
@@ -330,6 +339,12 @@ class ProjectBuildPartReservation(models.Model):
     )
     project_build = models.ForeignKey(
         ProjectBuild, on_delete=models.CASCADE, related_name="part_reservations"
+    )
+    project_part = models.ForeignKey(
+        ProjectPart,
+        on_delete=models.SET_NULL,
+        related_name="reservations",
+        null=True,
     )
     created = models.DateTimeField(default=timezone.now)
     utilized = models.DateTimeField(null=True, blank=True)

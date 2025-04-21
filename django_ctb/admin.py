@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.shortcuts import render
 from functools import update_wrapper
 from django.utils.encoding import force_str
+from django.utils.html import format_html
 from django.http import Http404
 from django.contrib.admin.utils import unquote
 from django.urls import path, reverse
@@ -65,9 +66,21 @@ class VendorPartInline(admin.TabularInline):
 
 
 class InventoryLineInline(admin.TabularInline):
-    # fields = ("item_number", "cost", "volume", "url_path")
+    fields = ("inventory", "quantity", "is_deprioritized", "link")
+    readonly_fields = ("link",)
     model = models.InventoryLine
     extra = 1
+
+    def link(self, obj):
+        if obj is not None:
+            return format_html(
+                '<a href="{}">Details</a>',
+                reverse(
+                    "admin:django_ctb_inventoryline_change",
+                    kwargs={"object_id": obj.pk},
+                ),
+            )
+        return ""
 
 
 @admin.register(models.Part)

@@ -61,14 +61,19 @@ class InventoryLineFulfillment:
 
 
 class PartSatisfaction:
-    def __init__(self, *, part, needed):
+    def __init__(self, *, part, needed, project_part, substitute_part=None):
         self.part = part
+        self.substitute_part = substitute_part
+        self.project_part = project_part
         self.needed = needed
         self.unfulfilled = needed
         self.fulfillments = self.calculate_fulfillment()
 
     def calculate_fulfillment(self) -> list[InventoryLineFulfillment]:
         _equivalents = list(self.part.equivalents.all())
+        if self.substitute_part is not None:
+            _equivalents.append(self.substitute_part)
+            _equivalents.extend(self.substitute_part.equivalents.all())
         _equivalents.append(self.part)
         inventory_lines = models.InventoryLine.objects.filter(
             part__in=_equivalents, is_deprioritized=False
@@ -106,6 +111,7 @@ class ProjectBuildPartReservationService:
                 models.ProjectBuildPartReservation.objects.create(
                     inventory_action=inventory_action,
                     project_build=build,
+                    project_part=satisfaction.project_part,
                 )
             )
         return reservations
@@ -147,7 +153,13 @@ class ProjectBuildService:
                 continue
             _pk = project_part.part.pk
             consolodated_project_parts.setdefault(
-                _pk, {"part": project_part.part, "quantity": 0}
+                _pk,
+                {
+                    "part": project_part.part,
+                    "substitute_part": project_part.substitute_part,
+                    "quantity": 0,
+                    "project_part": project_part,
+                },
             )
             consolodated_project_parts[_pk]["quantity"] += (
                 project_part.quantity * build.quantity
@@ -157,8 +169,12 @@ class ProjectBuildService:
         unsatisfied_demand = []
         for _part in consolodated_project_parts.values():
             part = _part["part"]
-            quantity_needed = _part["quantity"]
-            satisfaction = PartSatisfaction(part=part, needed=quantity_needed)
+            satisfaction = PartSatisfaction(
+                part=part,
+                substitute_part=_part["substitute_part"],
+                needed=_part["quantity"],
+                project_part=_part["project_part"],
+            )
             if satisfaction.unfulfilled > 0:
                 unsatisfied_demand.append(satisfaction)
                 models.ProjectBuildPartShortage.objects.create(
@@ -168,6 +184,14 @@ class ProjectBuildService:
                 )
             else:
                 satisfied.append(satisfaction)
+        reservations = []
+        for satisfaction in satisfied:
+            # create reservation for part
+            reservations.extend(
+                ProjectBuildPartReservationService().create_reservations(
+                    satisfaction=satisfaction, build=build
+                )
+            )
 
         if unsatisfied_demand:
             print("!! Not clear to build !!")
@@ -181,14 +205,6 @@ class ProjectBuildService:
                     print(f">> {_vendor_part.vendor.name} {_vendor_part.item_number}")
             raise self.InsufficientInventory(lacking=unsatisfied_demand)
 
-        reservations = []
-        for satisfaction in satisfied:
-            # create reservation for part
-            reservations.extend(
-                ProjectBuildPartReservationService().create_reservations(
-                    satisfaction=satisfaction, build=build
-                )
-            )
         build.cleared = timezone.now()
         build.save()
         return reservations
@@ -213,7 +229,7 @@ class ProjectBuildService:
                 models.ProjectBuild.objects.filter(completed__isnull=True)
                 .exclude(cleared__isnull=True)
                 .select_related("project_version")
-                .prefetch_related("project_version__parts")
+                .prefetch_related("project_version__project_parts")
                 .get(pk=build_pk)
             )
         except models.ProjectBuild.DoesNotExist:
@@ -225,7 +241,7 @@ class ProjectBuildService:
             build = (
                 models.ProjectBuild.objects.filter(completed__isnull=True)
                 .select_related("project_version")
-                .prefetch_related("project_version__parts")
+                .prefetch_related("project_version__project_parts")
                 .get(pk=build_pk)
             )
         except models.ProjectBuild.DoesNotExist:
@@ -506,6 +522,7 @@ class PartUsage:
         # return self.amortized_usage / max(0.1, self.in_stock)
         return self.rolling_horizon_usage / max(0.1, self.in_stock)
 
+    @property
     def sort_key(self):
         return (self.order_priority, self.total_used, self.action_count)
 
@@ -526,6 +543,6 @@ class PartAnalyticsService:
                 usage.part.value,
                 usage.in_stock,
                 usage.part.part_vendors.all().values_list("item_number", flat=True),
-                usage.actions,
+                usage.action_count,
                 usage.total_used,
             )

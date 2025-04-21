@@ -166,7 +166,10 @@ The fundamental actions that those services provide are described below, each of
 ## Housekeeping
 
 ### TODO
-- Where tf did the BOM view go???
+- Build BOM to show which actual parts were reserved for the build (substitute parts, equivalent parts, &c.)
+  - Sortable by footprint ref (for assembly) or part value (for easy picking)
+- BOM view to include part and inventory line link
+
 - Document workflows -- flowcharts for:
   - Create new project
   - Figuring out what part to use for a design
@@ -193,3 +196,16 @@ The fundamental actions that those services provide are described below, each of
     - Filtering by component type, footprint, availability
     - Sortable by component value, symbol, name
     - Store links
+
+
+### Processes
+
+#### Design and Schematic Layout
+
+As I place parts into the schematic I check:
+- Whether the part is stocked, if not:
+  - Revise design to use a stocked part
+  - Order part
+  For this I use the "Inventory Lines" index and sort by prefix and (sometimes) by footprint. If I don't see what I want to use there then I fall back to the "Parts" index again sorting by prefix. Ideally I would be able to see the quantity on hand from the parts index to avoid double searching.
+- What part number to annotate onto schematic part (have to click through to "part" from "inventory line")
+- What footprint to associate to schematic part (have to click through to "package" from "part")
