@@ -3,7 +3,7 @@ import csv
 
 from django.core.management.base import BaseCommand
 from pydantic import BaseModel, Field
-from django_ctb import models, services
+from django_ctb import models
 from django_ctb.mouser.services import MouserService
 
 

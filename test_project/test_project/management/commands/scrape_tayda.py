@@ -133,15 +133,15 @@ class TaydaScraper:
                 "volume": self.volume,
             },
         )
-        print(f">> Created part and vendor part")
+        print(">> Created part and vendor part")
 
     def parse(self):
         # get each item on page
         print("parsing")
         for item_tag in self.soup.find_all("li", class_="product-item"):
-            print(f"Found item")
+            print("Found item")
             self.parse_item(item_tag)
-            print(f"Done parsing item")
+            print("Done parsing item")
 
 
 class SmdResistorScraper(TaydaScraper):

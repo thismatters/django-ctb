@@ -50,9 +50,7 @@ class TestMouserService:
         call_count = 0
 
         def fake__populate(self, vendor_part):
-            assert vendor_part_mouser == vendor_part
-            nonlocal call_count
-            call_count += 1
+            raise Exception
 
         monkeypatch.setattr(MouserService, "_populate", fake__populate)
         MouserService().populate(123)
@@ -64,7 +62,7 @@ class TestMouserService:
 
         monkeypatch.setattr(MouserClient, "get_part", fake_client_get_part)
         with pytest.raises(MouserService.MissingPart):
-            ret = MouserService()._create("asdf-1234")
+            MouserService()._create("asdf-1234")
 
     def test__create(self, db, monkeypatch, vendor_mouser):
         assert m.Part.objects.all().count() == 0
@@ -85,7 +83,7 @@ class TestMouserService:
             return mouser_part
 
         monkeypatch.setattr(MouserClient, "get_part", fake_client_get_part)
-        ret = MouserService()._create("asdf-1234")
+        MouserService()._create("asdf-1234")
         assert m.Part.objects.all().count() == 1
         p = m.Part.objects.get()
         assert p.name == "BIGBOI1234"

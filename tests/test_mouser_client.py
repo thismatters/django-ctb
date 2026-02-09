@@ -25,7 +25,7 @@ class TestMouserClient:
 
         monkeypatch.setattr(requests, "post", fake_post)
         with pytest.raises(MouserClient.EmptyResponse):
-            mouser_part = MouserClient().get_part("876-ASDFQWERZXCV")
+            MouserClient().get_part("876-ASDFQWERZXCV")
 
     def test_get_part__bad_response(self, monkeypatch):
         def fake_post(*args, **kwargs):
@@ -33,7 +33,7 @@ class TestMouserClient:
 
         monkeypatch.setattr(requests, "post", fake_post)
         with pytest.raises(MouserClient.BadResponse):
-            mouser_part = MouserClient().get_part("876-ASDFQWERZXCV")
+            MouserClient().get_part("876-ASDFQWERZXCV")
 
     def test_get_part__bad_json(self, monkeypatch):
         def fake_post(*args, **kwargs):
@@ -41,7 +41,7 @@ class TestMouserClient:
 
         monkeypatch.setattr(requests, "post", fake_post)
         with pytest.raises(Exception):
-            mouser_part = MouserClient().get_part("876-ASDFQWERZXCV")
+            MouserClient().get_part("876-ASDFQWERZXCV")
 
     def test_get_part(self, monkeypatch):
         def fake_post(*args, **kwargs):

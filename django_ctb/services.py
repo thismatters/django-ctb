@@ -1,8 +1,8 @@
+from typing import Sequence
 import csv
 import re
 import io
 import logging
-import zipfile
 from contextlib import closing
 from dataclasses import dataclass
 from django.db.models import Sum
@@ -16,6 +16,16 @@ from django_ctb.mouser.services import MouserPartService
 logger = logging.getLogger(__name__)
 
 
+class MissingVendorPart(Exception):
+    pass
+
+
+@dataclass
+class PartCount:
+    part: models.Part
+    count: int
+
+
 class VendorOrderService:
     def _complete_order_line(self, order_line):
         # resolve part/inventory line
@@ -23,7 +33,7 @@ class VendorOrderService:
             part=order_line.vendor_part.part, inventory=order_line.for_inventory
         )
         # create inventory action
-        inventory_action = models.InventoryAction.objects.create(
+        models.InventoryAction.objects.create(
             inventory_line=inventory_line,
             delta=order_line.quantity,
             order_line=order_line,
@@ -49,6 +59,78 @@ class VendorOrderService:
             raise
         self._complete_order(order)
 
+    def _accumulate_shortfalls(self, build: models.ProjectBuild) -> Sequence[PartCount]:
+        _shortfalls = {}
+        for shortfall in build.shortfalls.all():
+            part = shortfall.part
+            _shortfalls.setdefault(part.pk, PartCount(part=part, count=0))
+            _shortfalls[part.pk].count += shortfall.quantity
+        return _shortfalls.values()
+
+    def _select_vendor_part(self, part: models.Part) -> models.VendorPart:
+        print(f">> Need more {part}, searching for best vendor")
+        # TODO: should this incorporate the order volume somehow?
+        vendor_part = (
+            models.VendorPart.objects.filter(part=part).order_by("cost").first()
+        )
+        if vendor_part is None:
+            print(
+                f"!! Part {part} does not have a vendor associated, "
+                "cannot generate order!"
+            )
+            raise MissingVendorPart
+        return vendor_part
+
+    def _populate_vendor_order(
+        self,
+        *,
+        vendor_part: models.VendorPart,
+        quantity: int,
+        inventory: models.Inventory,
+    ):
+        # get (or create) open vendor order for necessary vendor
+        vendor_order, _ = models.VendorOrder.objects.get_or_create(
+            vendor=vendor_part.vendor,
+            placed__isnull=True,
+        )
+        # create order lines for shortfall
+        order_line, _ = models.VendorOrderLine.objects.get_or_create(
+            vendor_order=vendor_order,
+            vendor_part=vendor_part,
+            cost=vendor_part.cost,
+            for_inventory=inventory,
+            defaults={"quantity": 0},
+        )
+        order_line.quantity += quantity
+        order_line.save()
+
+    def generate_vendor_orders(self, build_pk):
+        # get shortfalls
+        try:
+            build = (
+                models.ProjectBuild.objects.filter(completed__isnull=True)
+                .prefetch_related("shortfalls")
+                .get(pk=build_pk)
+            )
+        except models.ProjectBuild.DoesNotExist:
+            return
+        inventory = models.Inventory.objects.first()
+        if inventory is None:
+            return
+        # analyze shortfalls for vendors and item numbers
+        _shortfalls = self._accumulate_shortfalls(build)
+        for _shortfall in _shortfalls:
+            try:
+                selected_vendor_part = self._select_vendor_part(_shortfall.part)
+            except MissingVendorPart:
+                # nothing to do for this part
+                continue
+            self._populate_vendor_order(
+                vendor_part=selected_vendor_part,
+                quantity=_shortfall.count,
+                inventory=inventory,
+            )
+
 
 class InventoryLineFulfillment:
     def __init__(self, *, inventory_line, depletion):
@@ -70,11 +152,11 @@ class PartSatisfaction:
         self.fulfillments = self.calculate_fulfillment()
 
     def calculate_fulfillment(self) -> list[InventoryLineFulfillment]:
-        _equivalents = list(self.part.equivalents.all())
+        _part = self.part
         if self.substitute_part is not None:
-            _equivalents.append(self.substitute_part)
-            _equivalents.extend(self.substitute_part.equivalents.all())
-        _equivalents.append(self.part)
+            _part = self.substitute_part
+        _equivalents = [_part]
+        _equivalents.extend(_part.equivalents.all())
         inventory_lines = models.InventoryLine.objects.filter(
             part__in=_equivalents, is_deprioritized=False
         ).order_by("quantity")
@@ -253,7 +335,7 @@ class ProjectBuildService:
 
     def _cancel_build(self, build):
         if build.completed is not None:
-            print(f"!! Build already completed, cannot cancel")
+            print("!! Build already completed, cannot cancel")
             return
         ProjectBuildPartReservationService().delete_reservations(
             build.part_reservations.all()
@@ -265,7 +347,8 @@ class ProjectBuildService:
         build = (
             models.ProjectBuild.objects.filter(completed__isnull=True)
             # .select_related("part_reservations")
-            .prefetch_related("part_reservations").get(pk=build_pk)
+            .prefetch_related("part_reservations")
+            .get(pk=build_pk)
         )
         return self._cancel_build(build)
 
@@ -300,10 +383,6 @@ class BillOfMaterialsRow(BaseModel):
     @classmethod
     def split_and_strip(cls, value: str) -> list[str]:
         return [v.strip() for v in value.split(",") if v.strip()]
-
-
-class MissingVendorPart(Exception):
-    pass
 
 
 class ProjectVersionBomService:
@@ -441,9 +520,10 @@ class ProjectVersionBomService:
         _bom_url = self._build_bom_url(project_version=project_version)
         print(_bom_url)
         file_response = requests.get(_bom_url)
-        with closing(file_response), io.StringIO(
-            file_response.content.decode("utf-8")
-        ) as bom:
+        with (
+            closing(file_response),
+            io.StringIO(file_response.content.decode("utf-8")) as bom,
+        ):
             reader = csv.DictReader(bom)
             print("Parsing csv")
             for line_number, _row in enumerate(reader, start=1):
@@ -533,7 +613,7 @@ class PartAnalyticsService:
         for part in models.Part.objects.all():
             # collect rate of usage
             part_usages.append(PartUsage(part=part))
-        for usage in sorted(part_usages, key=lambda x: x.sort_key, reverse=True):
+        for usage in sorted(part_usages, key=lambda x: x.sort_key, reverse=True)[:10]:
             if usage.action_count == 0:
                 continue
             print(
@@ -546,3 +626,20 @@ class PartAnalyticsService:
                 usage.action_count,
                 usage.total_used,
             )
+
+    def reconcile_reservations_with_inventory(self):
+        reservations = models.ProjectBuildPartReservation.objects.filter(
+            utilized__isnull=True
+        ).select_related("inventory_action")
+        # Gather part quantities
+        line_reservations = {}
+        for reservation in reservations:
+            line_pk = reservation.inventory_action.inventory_line.pk
+            line_reservations.setdefault(line_pk, 0)
+            line_reservations[line_pk] += reservation.inventory_action.delta * -1
+        print(line_reservations)
+        # check for potential shortcomings (due to inventory errors)
+        for line_pk, total_delta in line_reservations.items():
+            line = models.InventoryLine.objects.get(pk=line_pk)
+            if total_delta * 0.1 > line.quantity:
+                print(f"!! Inventory alert for {line}")

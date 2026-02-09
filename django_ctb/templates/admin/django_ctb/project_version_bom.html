@@ -16,6 +16,7 @@
     <th>Part</th>
     <th>Unit Cost</th>
     <th>Cost</th>
+    <th>Part</th>
   </tr>
     <tr>
       <td>0</td>
@@ -23,6 +24,7 @@
       <td>PCB</td>
       <td>{{ project_version.pcb_unit_cost|floatformat:4 }}</td>
       <td>{{ project_version.pcb_unit_cost|floatformat:4 }}</td>
+      <td>N/A</td>
     </tr>
   {% for project_part in project_version.project_parts.all|dictsort:"line_number" %}
     <tr>
@@ -36,6 +38,7 @@
         <td>-</td>
       {% endif %}
       <td>{{ project_part.line_cost }}</td>
+      <td><a href="{% url 'admin:django_ctb_part_change' project_part.part.pk %}">part</a></td>
     </tr>
   {% endfor %}
   <tr>

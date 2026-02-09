@@ -140,27 +140,28 @@ class VendorPart(models.Model):
     url_path = models.CharField(
         max_length=128, help_text="includes the leading slash!", null=True, blank=True
     )
-    # unit_cost = models.GeneratedField(
-    #     expression=models.F("cost") / models.F("volume"),
-    #     output_field=models.DecimalField(decimal_places=4, max_digits=8),
-    #     db_persist=False,
-    # )
+    lot_cost = models.GeneratedField(
+        expression=models.F("cost") * models.F("volume"),
+        output_field=models.DecimalField(decimal_places=4, max_digits=8),
+        db_persist=False,
+    )
 
     @property
     def url(self):  # pragma: no cover
         return f"{self.vendor.base_url}{self.url_path}"
 
     def __str__(self):  # pragma: no cover
-        return f"{self.vendor} - {self.item_number}"
+        return f"{self.vendor} - {self.item_number} - {self.part.name}"
 
     class Meta:
         ordering = ("vendor__name", "item_number")
 
 
 class VendorOrder(models.Model):
-    vendor = models.ForeignKey(Vendor, on_delete=models.PROTECT)
-    order_number = models.CharField(max_length=128, null=True)
+    vendor = models.ForeignKey(Vendor, on_delete=models.PROTECT, related_name="orders")
+    order_number = models.CharField(max_length=128, null=True, blank=True)
     created = models.DateTimeField(default=timezone.now)
+    placed = models.DateTimeField(null=True, blank=True)
     fulfilled = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):  # pragma: no cover
@@ -177,6 +178,12 @@ class VendorOrderLine(models.Model):
     quantity = models.PositiveIntegerField()
     cost = models.DecimalField(decimal_places=4, max_digits=8, help_text="per unit")
     for_inventory = models.ForeignKey("Inventory", on_delete=models.PROTECT)
+
+    def __str__(self):  # pragma: no cover
+        return (
+            f"{self.vendor_order.vendor} {self.vendor_order.order_number} "
+            f"x{self.quantity}"
+        )
 
 
 class Inventory(models.Model):
@@ -196,8 +203,35 @@ class InventoryLine(models.Model):
     part = models.ForeignKey(
         Part, on_delete=models.PROTECT, related_name="inventory_lines"
     )
-    quantity = models.IntegerField(default=0)
+    quantity = models.IntegerField(
+        default=0,
+        help_text="quantity on hand (unused reservations are removed from this number)",
+    )
     is_deprioritized = models.BooleanField(default=False)
+
+    @property
+    def item_numbers(self) -> str:
+        _item_numbers = []
+        for vendor_part in self.part.part_vendors.all():
+            _item_numbers.append(vendor_part.item_number)
+        return ", ".join(_item_numbers)
+
+    def __str__(self):  # pragma: no cover
+        return f"{self.quantity}x {self.part} {self.item_numbers}"
+
+    @property
+    def quantity_on_hand(self) -> int:
+        """
+        Number of parts which are countable in physical inventory
+        (includes numbers from pending or cleared reservations)
+        """
+        pending_quantity = sum(
+            self.inventory_actions.filter(
+                build__isnull=False, build__completed__isnull=True
+            ).values_list("delta", flat=True)
+        )
+        # values for delta are negative
+        return self.quantity - pending_quantity
 
 
 class InventoryAction(models.Model):
@@ -215,6 +249,15 @@ class InventoryAction(models.Model):
     )
     # when did it happen
     created = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):  # pragma: no cover
+        if self.order_line is not None:
+            return (
+                f"{self.delta} {self.inventory_line.part} from "
+                f"{self.order_line.vendor_order.vendor.name}"
+            )
+        else:
+            return f"{self.delta:+} {self.inventory_line.part}"
 
 
 class Project(models.Model):
@@ -270,6 +313,7 @@ class ProjectPart(models.Model):
         related_name="substitute_project_part",
         null=True,
         blank=True,
+        help_text="When set, the substitute part will be used instead of the actual part",
     )
     missing_part_description = models.CharField(max_length=256, null=True, blank=True)
     project_version = models.ForeignKey(
@@ -287,6 +331,11 @@ class ProjectPart(models.Model):
         if self.part.unit_cost is None:
             return 0
         return self.part.unit_cost * self.quantity
+
+    @property
+    def footprints(self):
+        _footprint_refs = self.footprint_refs.values_list("footprint_ref", flat=True)
+        return ", ".join(_footprint_refs)
 
     # derived field for footprint refs?
     def __str__(self):
@@ -317,8 +366,17 @@ class ProjectBuild(models.Model):
         blank=True,
     )
 
+    @property
+    def is_complete(self) -> bool:
+        return self.completed is not None
+
     def __str__(self):  # pragma: no cover
-        return f"{self.quantity}x {self.project_version}"
+        suffix = ""
+        if self.completed is not None:
+            suffix = " [completed]"
+        elif self.cleared is not None:
+            suffix = " [cleared]"
+        return f"{self.quantity}x {self.project_version}{suffix}"
 
 
 class ProjectBuildPartShortage(models.Model):
@@ -335,7 +393,10 @@ class ProjectBuildPartReservation(models.Model):
     their respective inventory lines and reserved here"""
 
     inventory_action = models.ForeignKey(
-        InventoryAction, on_delete=models.PROTECT, null=True
+        InventoryAction,
+        on_delete=models.PROTECT,
+        null=True,
+        related_name="reservations",
     )
     project_build = models.ForeignKey(
         ProjectBuild, on_delete=models.CASCADE, related_name="part_reservations"

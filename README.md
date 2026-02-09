@@ -166,18 +166,23 @@ The fundamental actions that those services provide are described below, each of
 ## Housekeeping
 
 ### TODO
-- Build BOM to show which actual parts were reserved for the build (substitute parts, equivalent parts, &c.)
-  - Sortable by footprint ref (for assembly) or part value (for easy picking)
-- BOM view to include part and inventory line link
-
+- Clear to build should remove any prior shortfalls/be idempotent
+- Document package
+  - "features" via test docstrings
+  - UML diagrams
+    - models (autogen)
+    - sequence
+      - full project E2E
+      - BOM revision loops
+      - Build part subsitutions
+      - Vendor orders
 - Document workflows -- flowcharts for:
   - Create new project
   - Figuring out what part to use for a design
 
-- make BOM accessible from the clear to build screen
-- Clear to build should remove any prior shortfalls
+- Incorporate analytics methods as actions... maybe persist top recommendations?
+
 - Picking order/picking aide (inventory locations?)
-- Generate vendor order objects from clear to build page
 - Generate shopping carts from vendor orders (may have to introspect on how to add items to cart in Tayda with Charlesproxy)
 
 - Start designing frontend!

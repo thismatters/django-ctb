@@ -1,8 +1,7 @@
 import dramatiq
 
-from django_ctb import models
 from django_ctb.mouser.services import (
-    populate_mouser_vendor_part,
+    populate_mouser_vendor_part,  # noqa: F401
 )
 from django_ctb.services import (
     ProjectVersionBomService,
@@ -34,3 +33,9 @@ def complete_order(vendor_order_pk):
 @dramatiq.actor
 def cancel_build(project_build_pk):
     ProjectBuildService().cancel_build(project_build_pk)
+
+
+@dramatiq.actor
+def generate_vendor_orders(project_build_pks):
+    for project_build_pk in project_build_pks:
+        VendorOrderService().generate_vendor_orders(project_build_pk)
