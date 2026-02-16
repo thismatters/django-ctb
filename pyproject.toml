@@ -1,3 +1,67 @@
+[project]
+name = "django-ctb"
+version = "0.0.1"
+requires-python = ">=3.12"
+description="Django app for managing small-scale electronics manufacturing inventory."
+authors = [
+    {name = "Paul Stiverson", email = "paul@thismatters.net"},
+]
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE.txt"]
+keywords = ["inventory", "manufacturing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Framework :: Django :: 5.0",
+    "Framework :: Django :: 5.2",
+    "Framework :: Django :: 6.0",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "django>=5.0.0",
+    "django-appconf>=1.2.0",
+]
+
+[project.urls]
+repository = "http://github.com/thismatters/django-ctb/"
+changelog = "https://github.com/thismatters/django-ctb/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dramatiq = [
+    "dramatiq[redis, watch]==1.17.0",
+    "django-dramatiq==0.11.6"
+]
+dev = [
+    "pydantic==2.7.4",
+    "requests==2.32.3",
+    "ruff==0.15.1",
+    "pytest==8.2.2",
+    "pytest-cov==5.0.0",
+    "pytest-django==4.8.0",
+    "tox==4.11.3",
+    "django-extensions==3.2.3",
+    "pygraphviz==1.11",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "django_ctb"
+module-root = ""
+
 [tool.ruff]
 exclude = ["migrations"]
 

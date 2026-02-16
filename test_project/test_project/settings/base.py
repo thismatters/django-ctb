@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_extensions",
     "django_dramatiq",
     "django_ctb",
     "test_project",
@@ -143,4 +144,4 @@ DRAMATIQ_BROKER = {
 }
 
 
-MOUSER_API_KEY = os.environ.get("MOUSER_API_KEY", "FAKE")
+CTB_MOUSER_API_KEY = os.environ.get("MOUSER_API_KEY", "FAKE")

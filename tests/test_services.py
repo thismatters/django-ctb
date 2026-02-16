@@ -8,1346 +8,35 @@ from django_ctb import services as s
 from django_ctb.mouser.services import MouserService
 
 
-class TestVendorOrderService:
-    def test__complete_order_line(
-        self, vendor_order_line_factory, vendor_part, inventory
-    ):
-        """
-        GIVEN a vendor order has an order line associated to an inventory
-        AND no inventory line exists for the order line part
-        WHEN _complete_order_line is run
-        THEN an inventory line will be created in the given inventory for the
-          order line part
-        AND the quantity of parts in the inventory line will be increased by
-          the quantity in the inventory line
-        AND an inventory line action will be created showing the inventory
-          line, the change in quantity, and the vendor order which generated
-          the action
-        """
-        assert len(m.InventoryLine.objects.all()) == 0
-        order_line = vendor_order_line_factory(vendor_part=vendor_part, quantity=11)
-        s.VendorOrderService()._complete_order_line(order_line)
-        assert len(m.InventoryLine.objects.all()) == 1
-        assert len(m.InventoryAction.objects.all()) == 1
-        inventory_line = m.InventoryLine.objects.all()[0]
-        assert inventory_line.quantity == order_line.quantity
-        assert inventory_line.part == order_line.vendor_part.part
-        assert inventory_line.inventory == inventory
-        action = m.InventoryAction.objects.all()[0]
-        assert action.inventory_line == inventory_line
-        assert action.delta == 11
-        assert action.order_line == order_line
-        assert action.build is None
-        action.delete()
-        inventory_line.delete()
-
-    def test__complete_order_line__existing_inventory(
-        self, vendor_order_line_factory, vendor_part, inventory_line_factory
-    ):
-        """
-        GIVEN a vendor order has an order line associated to an inventory
-        AND an inventory line exists for the order line part
-        WHEN _complete_order_line is run
-        AND the quantity of parts in the inventory line will be increased by
-          the quantity in the inventory line
-        AND an inventory line action will be created showing the inventory
-          line, the change in quantity, and the vendor order which generated
-          the action
-        """
-        inventory_line = inventory_line_factory(part=vendor_part.part, quantity=3)
-        order_line = vendor_order_line_factory(vendor_part=vendor_part, quantity=11)
-        s.VendorOrderService()._complete_order_line(order_line)
-        inventory_line.refresh_from_db()
-        assert inventory_line.quantity == 14
-        assert len(m.InventoryAction.objects.all()) == 1
-        action = m.InventoryAction.objects.all()[0]
-        assert action.inventory_line == inventory_line
-        assert action.delta == 11
-        assert action.order_line == order_line
-        assert action.build is None
-        action.delete()
-
-    def test__complete_order(
-        self,
-        vendor_order_line_factory,
-        monkeypatch,
-        vendor_part_factory,
-        vendor_order,
-        part_factory,
-    ):
-        """
-        GIVEN a vendor order exists with several order lines
-        WHEN _complete_order is called on the vendor order
-        THEN _complete_order_line will be called for each order line
-        AND the vendor order will be marked "fulfilled"
-        """
-        call_args = []
-
-        def fake_complete_order_line(self, order_line):
-            call_args.append(order_line)
-
-        order_lines = []
-        for idx in range(5):
-            part = part_factory(name=f"part{idx}", symbol="R")
-            vendor_part = vendor_part_factory(part=part, item_number=f"test-item-{idx}")
-            order_lines.append(
-                vendor_order_line_factory(vendor_part=vendor_part, quantity=100)
-            )
-
-        monkeypatch.setattr(
-            s.VendorOrderService, "_complete_order_line", fake_complete_order_line
-        )
-        s.VendorOrderService()._complete_order(vendor_order)
-        vendor_order.refresh_from_db()
-        assert vendor_order.fulfilled is not None
-        assert call_args == order_lines
-
-    def test_complete_order(self, monkeypatch, vendor_order):
-        """
-        GIVEN a vendor order exists
-        WHEN complete_order is called for the vendor order
-        THEN _complete_order is called for the vendor order
-        """
-        call_count = 0
-
-        def fake_complete_order(self, order):
-            assert order == vendor_order
-            nonlocal call_count
-            call_count += 1
-
-        monkeypatch.setattr(
-            s.VendorOrderService, "_complete_order", fake_complete_order
-        )
-        s.VendorOrderService().complete_order(vendor_order.pk)
-        assert call_count == 1
-
-    def test_complete_order_bad(self, db):
-        """
-        WHEN complete_order is called for a non-extant vendor order
-        THEN an exception is raised
-        """
-        with pytest.raises(m.VendorOrder.DoesNotExist):
-            s.VendorOrderService().complete_order(1234)
-
-    def test_complete_order_fulfilled(self, vendor_order):
-        """
-        GIVEN a vendor order exists which has already been fulfilled
-        WHEN complete_order is called for the vendor order
-        THEN an exception is raised
-        """
-        vendor_order.fulfilled = timezone.now()
-        vendor_order.save()
-        with pytest.raises(m.VendorOrder.DoesNotExist):
-            s.VendorOrderService().complete_order(vendor_order.pk)
-
-    def test__accumulate_shortfalls(
-        self, project_build, part, part_factory, project_build_part_shortage_factory
-    ):
-        """
-        GIVEN a project build exists
-        AND the project build has several shortfalls
-        WHEN _accumulate_shortfalls is called for the project build
-        THEN any shortfalls which share a common part will be gathered into a
-          single entry with the sum total of component count
-        AND all shortfalls from the build will be represented in the return
-        """
-        other_part = part_factory(name="other", symbol="O")
-        project_build_part_shortage_factory(
-            part=part, quantity=6, project_build=project_build
-        )
-        project_build_part_shortage_factory(
-            part=part, quantity=12, project_build=project_build
-        )
-        project_build_part_shortage_factory(
-            part=other_part, quantity=3, project_build=project_build
-        )
-        shortfalls = list(s.VendorOrderService()._accumulate_shortfalls(project_build))
-        assert len(shortfalls) == 2
-        if shortfalls[0].part == part:
-            assert shortfalls[0].count == 18
-            assert shortfalls[1].part == other_part
-            assert shortfalls[1].count == 3
-        elif shortfalls[1].part == part:
-            assert shortfalls[1].count == 18
-            assert shortfalls[0].part == other_part
-            assert shortfalls[0].count == 3
-        else:
-            raise Exception("bad shortfalls")
-
-    def test__select_vendor_part(self, part, vendor_part_factory, vendor):
-        """
-        GIVEN a part exists with more than one vendor part
-        WHEN _select_vendor_part is run for the part
-        THEN the vendor part with the lowest cost will be returned
-        """
-        cheapest = vendor_part_factory(cost=0.01, part=part)
-        vendor_part_factory(cost=0.02, part=part)
-        vendor_part_factory(cost=0.03, part=part)
-        selected = s.VendorOrderService()._select_vendor_part(part)
-        assert selected == cheapest
-
-    def test__select_vendor_part__none(self, part):
-        """
-        GIVEN a part exists with no vendor part
-        WHEN _select_vendor_part is run for the part
-        THEN a MissingVendorPart exception is raised
-        """
-        with pytest.raises(s.MissingVendorPart):
-            s.VendorOrderService()._select_vendor_part(part)
-
-    def test__populate_vendor_order(
-        self, vendor_part, vendor, vendor_order, vendor_order_line, inventory
-    ):
-        """
-        GIVEN a vendor part exists for a vendor
-        AND a vendor order exists for the given vendor
-        AND a vendor order line exists for the part
-        WHEN _populate_vendor_order is called for the vendor part providing a
-          quantity
-        THEN the provided quantity will be added to the existing order line
-        """
-
-        assert vendor_order.lines.count() == 1
-        s.VendorOrderService()._populate_vendor_order(
-            vendor_part=vendor_part, quantity=22, inventory=inventory
-        )
-        vendor_order_line.refresh_from_db()
-        assert vendor_order.lines.count() == 1
-        assert vendor_order_line.quantity == 32
-
-    def test__populate_vendor_order__new_line(
-        self, vendor_part, vendor_order, inventory
-    ):
-        """
-        GIVEN a vendor part exists for a vendor
-        AND a vendor order exists for the given vendor
-        AND no vendor order line exists for the part
-        WHEN _populate_vendor_order is called for the vendor part providing a quantity
-        THEN a vendor order will be created with the given vendor
-        AND a vendor order line will be created for the vendor part
-        AND the provided quantity will be represented in the order line
-        """
-        assert vendor_order.lines.count() == 0
-        s.VendorOrderService()._populate_vendor_order(
-            vendor_part=vendor_part, quantity=22, inventory=inventory
-        )
-        assert vendor_order.lines.count() == 1
-        assert vendor_order.lines.all()[0].quantity == 22
-        assert vendor_order.lines.all()[0].vendor_part == vendor_part
-        vendor_order.lines.all()[0].delete()
-
-    def test__populate_vendor_order__new_order(self, vendor_part, inventory):
-        """
-        GIVEN a vendor part exists for a vendor
-        AND no vendor order exists for the given vendor
-        WHEN _populate_vendor_order is called for the vendor part providing a quantity
-        THEN a vendor order will be created with the given vendor
-        AND a vendor order line will be created for the vendor part
-        AND the provided quantity will be represented in the order line
-        """
-        assert m.VendorOrder.objects.count() == 0
-        s.VendorOrderService()._populate_vendor_order(
-            vendor_part=vendor_part, quantity=22, inventory=inventory
-        )
-        assert m.VendorOrder.objects.count() == 1
-        vendor_order = m.VendorOrder.objects.all()[0]
-        assert vendor_order.vendor == vendor_part.vendor
-        assert vendor_order.lines.count() == 1
-        assert vendor_order.lines.all()[0].vendor_part == vendor_part
-        assert vendor_order.lines.all()[0].quantity == 22
-        vendor_order.lines.all()[0].delete()
-        vendor_order.delete()
-
-    def test_generate_vendor_orders(
-        self,
-        project_build,
-        part,
-        part_factory,
-        project_build_part_shortage_factory,
-        vendor_part,
-        vendor_mouser,
-        vendor_part_factory,
-        vendor,
-        inventory,
-    ):
-        """
-        GIVEN a project build exists
-        AND the project build has several shortfalls to several vendors
-        AND the project build has shortfalls for parts with no vendor
-        WHEN generate_vendor_orders is called for the project build
-        THEN vendor orders will be made to the several vendors
-        AND each vendor order will have lines for the parts from that vendor
-        AND shortfalls without a vendor will be ignored
-        """
-        project_build_part_shortage_factory(
-            part=part, quantity=6, project_build=project_build
-        )
-        project_build_part_shortage_factory(
-            part=part, quantity=12, project_build=project_build
-        )
-        other_part = part_factory(name="other", symbol="O")
-        vendor_part_factory(part=other_part, vendor=vendor_mouser)
-        project_build_part_shortage_factory(
-            part=other_part, quantity=3, project_build=project_build
-        )
-        third_part = part_factory(name="third", symbol="T")
-        project_build_part_shortage_factory(
-            part=third_part, quantity=21, project_build=project_build
-        )
-
-        s.VendorOrderService().generate_vendor_orders(project_build.pk)
-        assert m.VendorOrder.objects.count() == 2
-        m.VendorOrder.objects.all().delete()
-        assert m.VendorOrder.objects.count() == 0
-
-    def test_generate_vendor_orders__no_build(self, db):
-        """
-        WHEN generate_vendor_orders is called for a non-extant project build
-        THEN no vendor orders are generated
-        """
-        assert m.VendorOrder.objects.count() == 0
-        s.VendorOrderService().generate_vendor_orders(1234)
-        assert m.VendorOrder.objects.count() == 0
-
-    def test_generate_vendor_orders__no_inventory(self, db, project_build):
-        """
-        GIVEN a project build exists
-        AND no inventory exists
-        WHEN generate_vendor_orders is called for the project build
-        THEN no vendor orders are generated
-        """
-
-        assert m.Inventory.objects.count() == 0
-        assert m.VendorOrder.objects.count() == 0
-        s.VendorOrderService().generate_vendor_orders(project_build.pk)
-        assert m.VendorOrder.objects.count() == 0
-
-
-class TestProjectBuildService:
-    def test_part_satisfaction_no_inventory(self, part, project_part):
-        """
-        GIVEN a part is used in a project
-        AND there is no inventory line for the part
-        WHEN the part satisfaction process is run
-        THEN no inventory line will be used in fulfillment
-        AND there will be unfilfilled need
-        """
-        satisfaction = s.PartSatisfaction(
-            part=part, needed=2, project_part=project_part
-        )
-        assert satisfaction.needed == 2
-        assert satisfaction.unfulfilled == 2
-        assert satisfaction.fulfillments == []
-
-    def test_part_satisfaction_insufficient_inventory(
-        self, part, inventory_line_factory, project_part
-    ):
-        """
-        GIVEN a part is used in a project
-        AND the given part has an inventory line with insufficient stock
-        WHEN the part satisfaction process is run
-        THEN the inventory line is used for fulfillment
-        AND there will be unfilfilled need
-        """
-        _line = inventory_line_factory(part=part, quantity=1)
-        satisfaction = s.PartSatisfaction(
-            part=part, needed=2, project_part=project_part
-        )
-        assert satisfaction.needed == 2
-        assert satisfaction.unfulfilled == 1
-        assert satisfaction.fulfillments[0].inventory_line == _line
-        assert satisfaction.fulfillments[0].depletion == 1
-
-    def test_part_satisfaction_sufficient_inventory(
-        self, part, inventory_line_factory, project_part
-    ):
-        """
-        GIVEN a part is used in a project
-        AND the given part has two inventory lines with stock
-        WHEN the part satisfaction process is run
-        THEN the inventory line with the least stock is used for fulfillment
-        """
-        _other_line = inventory_line_factory(part=part, quantity=5)
-        _line = inventory_line_factory(part=part, quantity=3)
-        satisfaction = s.PartSatisfaction(
-            part=part, needed=2, project_part=project_part
-        )
-        assert satisfaction.needed == 2
-        assert satisfaction.unfulfilled == 0
-        assert satisfaction.fulfillments[0].inventory_line == _line
-        assert satisfaction.fulfillments[0].depletion == 2
-
-    def test_part_satisfaction_sufficient_inventory_split(
-        self, part, inventory_line_factory, project_part
-    ):
-        """
-        GIVEN a part is used in a project
-        AND the given part has two inventory lines with stock
-        AND one of the inventory lines does not have enough stock for the project
-        WHEN the part satisfaction process is run
-        THEN the inventory line with the least stock is used for fulfillment first
-        AND the inventory line with the most stock is used for the remainder
-        """
-        _other_line = inventory_line_factory(part=part, quantity=5)
-        _line = inventory_line_factory(part=part, quantity=3)
-        satisfaction = s.PartSatisfaction(
-            part=part, needed=4, project_part=project_part
-        )
-        assert satisfaction.needed == 4
-        assert satisfaction.unfulfilled == 0
-        assert satisfaction.fulfillments[0].inventory_line == _line
-        assert satisfaction.fulfillments[0].depletion == 3
-        assert satisfaction.fulfillments[1].inventory_line == _other_line
-        assert satisfaction.fulfillments[1].depletion == 1
-
-    def test_part_satisfaction_sufficient_inventory_deprioritized(
-        self, part, inventory_line_factory, project_part
-    ):
-        """
-        GIVEN a part is used in a project
-        AND the given part has a deprioritized inventory line with stock
-        AND the given part has an inventory line with stock
-        WHEN the part satisfaction process is run
-        THEN the non deprioritized inventory line will be used
-        """
-        _line = inventory_line_factory(part=part, quantity=2, is_deprioritized=True)
-        _other_line = inventory_line_factory(part=part, quantity=5)
-        _third_line = inventory_line_factory(
-            part=part, quantity=3, is_deprioritized=True
-        )
-        satisfaction = s.PartSatisfaction(
-            part=part, needed=2, project_part=project_part
-        )
-        assert satisfaction.needed == 2
-        assert satisfaction.unfulfilled == 0
-        assert satisfaction.fulfillments[0].inventory_line == _other_line
-        assert satisfaction.fulfillments[0].depletion == 2
-
-    def test_clear_to_build_calls__clear_to_build(self, project_build, monkeypatch):
-        call_count = 0
-
-        def fake_clear_to_build(self, _build):
-            assert _build == project_build
-            nonlocal call_count
-            call_count += 1
-
-        monkeypatch.setattr(
-            s.ProjectBuildService, "_clear_to_build", fake_clear_to_build
-        )
-        s.ProjectBuildService().clear_to_build(project_build.pk)
-        assert call_count == 1
-
-    def test_clear_to_build__no_build(self, project_build):
-        project_build.completed = timezone.now()
-        project_build.save()
-
-        with pytest.raises(m.ProjectBuild.DoesNotExist):
-            s.ProjectBuildService().clear_to_build(project_build.pk)
-
-    def test_clear_to_build__insufficient_inventory(self, project_build, monkeypatch):
-        def fake_clear_to_build(self, _build):
-            raise s.ProjectBuildService.InsufficientInventory(lacking=[])
-
-        monkeypatch.setattr(
-            s.ProjectBuildService, "_clear_to_build", fake_clear_to_build
-        )
-        assert s.ProjectBuildService().clear_to_build(project_build.pk) == []
-
-    def test__clear_to_build(self, project_part, project_build, inventory_line_factory):
-        """
-        GIVEN a part is used in a project
-        AND there is enough stock of the given part to complete the project
-        WHEN the project clear to build process is run
-        THEN the project will be marked as cleared
-        AND a reservation will be made for all the quantity of parts needed
-        AND the quantity of the parts will be deducted from the inventory for the part
-        """
-        _line = inventory_line_factory(part=project_part.part, quantity=10)
-        s.ProjectBuildService()._clear_to_build(project_build)
-        assert project_build.part_reservations.count() == 1
-        assert len(m.InventoryAction.objects.all()) == 1
-        action = m.InventoryAction.objects.all()[0]
-        assert action.inventory_line == _line
-        assert action.delta == -6
-        assert action.order_line is None
-        assert action.build == project_build
-        _line.refresh_from_db()
-        assert _line.quantity == 4
-        s.ProjectBuildPartReservationService().delete_reservations(
-            project_build.part_reservations.all()
-        )
-        _line.refresh_from_db()
-        assert _line.quantity == 10
-        assert project_build.cleared is not None
-
-    def test__clear_to_build__not(
-        self, project_part, vendor_part, project_build, inventory_line_factory
-    ):
-        """
-        GIVEN a part is used in a project
-        AND there is not enough stock of the given part to complete the project
-        WHEN the project clear to build process is run
-        THEN the project will not be marked clear to build
-        AND the part and quantity of shortfall will be persisted
-        """
-        _line = inventory_line_factory(part=project_part.part, quantity=1)
-
-        with pytest.raises(s.ProjectBuildService.InsufficientInventory):
-            s.ProjectBuildService()._clear_to_build(project_build)
-        assert project_build.shortfalls.all().count() == 1
-        assert project_build.shortfalls.all()[0].quantity == 5
-        assert project_build.shortfalls.all()[0].part == project_part.part
-        project_build.refresh_from_db
-        assert project_build.cleared is None
-
-    def test__clear_to_build__accumulates_by_part(
-        self, project_build, project_part_factory, inventory_line_factory, part
-    ):
-        """
-        GIVEN a the same part is used as two separate project parts
-        WHEN the project clear to build process is run
-        THEN only one reservation for the part will be created
-        AND the full quantity of parts will be reserved
-        """
-        _line = inventory_line_factory(part=part, quantity=10)
-        project_part_factory(
-            project_version=project_build.project_version,
-            part=part,
-            quantity=1,
-            line_number=2,
-        )
-        reservations = s.ProjectBuildService()._clear_to_build(project_build)
-        assert len(reservations) == 1
-        assert reservations[0].inventory_action.delta == -9
-        _line.refresh_from_db()
-        assert _line.quantity == 1
-        s.ProjectBuildPartReservationService().delete_reservations(
-            project_build.part_reservations.all()
-        )
-        _line.refresh_from_db()
-        assert _line.quantity == 10
-
-    def test__clear_to_build__excluded_part(
-        self,
-        project_part,
-        project_build,
-        project_part_factory,
-        part,
-        part_factory,
-        inventory_line_factory,
-    ):
-        """
-        GIVEN a project build marks a given part as exluded
-        WHEN the project clear to build process is run
-        THEN no reservation is made for the excluded part
-        """
-        _line = inventory_line_factory(part=project_part.part, quantity=10)
-        excluded_part = part_factory(name="omitted", symbol="O")
-        excluded_project_part = project_part_factory(
-            part=excluded_part,
-            project_version=project_build.project_version,
-            line_number=2,
-            quantity=1,
-            is_optional=False,
-        )
-        project_build.excluded_project_parts.add(excluded_project_part)
-        reservations = s.ProjectBuildService()._clear_to_build(project_build)
-        assert len(reservations) == 1
-        assert reservations[0].inventory_action.inventory_line.part == part
-        project_build.excluded_project_parts.clear()
-        s.ProjectBuildPartReservationService().delete_reservations(
-            project_build.part_reservations.all()
-        )
-
-    def test__clear_to_build__equivalent_part(
-        self,
-        project_part,
-        project_build,
-        part,
-        part_factory,
-        inventory_line_factory,
-    ):
-        """
-        GIVEN a project uses a part which is not stocked
-        AND the given part is `equivalent_to` another part which is stocked
-        WHEN the project clear to build process is run
-        THEN the other part will be reserved
-        """
-        equivalent_part = part_factory(
-            name="equivalent", symbol="E", equivalent_to=part
-        )
-        _line = inventory_line_factory(part=equivalent_part, quantity=10)
-        reservations = s.ProjectBuildService()._clear_to_build(project_build)
-        assert len(reservations) == 1
-        assert reservations[0].inventory_action.inventory_line.part == equivalent_part
-        project_build.excluded_project_parts.clear()
-        s.ProjectBuildPartReservationService().delete_reservations(
-            project_build.part_reservations.all()
-        )
-
-    def test__clear_to_build__equivalent_part_original_part_stocked(
-        self,
-        project_part,
-        project_build,
-        part,
-        part_factory,
-        inventory_line_factory,
-    ):
-        """
-        GIVEN a project uses a part which is stocked
-        AND the given part is `equivalent_to` another part which is stocked
-        WHEN the project clear to build process is run
-        THEN the original part will be reserved
-        """
-        inventory_line_factory(part=part, quantity=10)
-        equivalent_part = part_factory(
-            name="equivalent", symbol="E", equivalent_to=part
-        )
-        _line = inventory_line_factory(part=equivalent_part, quantity=10)
-        reservations = s.ProjectBuildService()._clear_to_build(project_build)
-        assert len(reservations) == 1
-        assert reservations[0].inventory_action.inventory_line.part == part
-        project_build.excluded_project_parts.clear()
-        s.ProjectBuildPartReservationService().delete_reservations(
-            project_build.part_reservations.all()
-        )
-
-    def test__clear_to_build__substitute_part(
-        self, project_part, project_build, part, part_factory, inventory_line_factory
-    ):
-        """
-        GIVEN a project uses a part which is stocked
-        AND the project part includes a `substitute_part` which is stocked
-        WHEN the project clear to build process is run
-        THEN the other part will be reserved
-        """
-        inventory_line_factory(part=part, quantity=10)
-        substitute_part = part_factory(name="sub", symbol="S")
-        project_part.substitute_part = substitute_part
-        project_part.save()
-        _line = inventory_line_factory(part=substitute_part, quantity=10)
-        reservations = s.ProjectBuildService()._clear_to_build(project_build)
-        assert len(reservations) == 1
-        assert reservations[0].inventory_action.inventory_line.part == substitute_part
-        project_build.excluded_project_parts.clear()
-        s.ProjectBuildPartReservationService().delete_reservations(
-            project_build.part_reservations.all()
-        )
-
-    def test__clear_to_build__equivalent_substitute_part(
-        self, project_part, project_build, part, part_factory, inventory_line_factory
-    ):
-        """
-        GIVEN a project uses a part which is stocked
-        AND the project part includes a `substitute_part` which is stocked
-        AND the substitute part is `equivalent_to` another part which is stocked
-        WHEN the project clear to build process is run
-        THEN the equivalent part will be reserved
-        """
-        inventory_line_factory(part=part, quantity=10)
-        substitute_part = part_factory(name="sub", symbol="S")
-        equivalent_part = part_factory(
-            name="equivalent", symbol="E", equivalent_to=substitute_part
-        )
-        project_part.substitute_part = substitute_part
-        project_part.save()
-        _line = inventory_line_factory(part=equivalent_part, quantity=10)
-        reservations = s.ProjectBuildService()._clear_to_build(project_build)
-        assert len(reservations) == 1
-        assert reservations[0].inventory_action.inventory_line.part == equivalent_part
-        project_build.excluded_project_parts.clear()
-        s.ProjectBuildPartReservationService().delete_reservations(
-            project_build.part_reservations.all()
-        )
-
-    def test__complete_build(self, project_part, project_build, inventory_line_factory):
-        """
-        GIVEN a project build has been cleared
-        AND part reservations made
-        WHEN the complete build action is run for the project build
-        THEN the project build is marked completed
-        AND the part reservations are marked utilized
-        """
-        _line = inventory_line_factory(part=project_part.part, quantity=10)
-        project_build.cleared = timezone.now()
-        project_build.save()
-        reservation = m.ProjectBuildPartReservation.objects.create(
-            inventory_action=None,
-            project_build=project_build,
-        )
-        s.ProjectBuildService()._complete_build(project_build)
-        reservation.refresh_from_db()
-        project_build.refresh_from_db()
-        assert reservation.utilized is not None
-        assert project_build.completed is not None
-        reservation.delete()
-
-    def test__complete_build__no_build(
-        self, project_part, project_build, inventory_line_factory, monkeypatch
-    ):
-        """
-        GIVEN a project build has not been cleared
-        AND there is not sufficient inventory to build the project
-        WHEN the complete build action is run for the project build
-        THEN the clear to build action is run for the project build
-        AND the project is not marked completed
-        """
-        _line = inventory_line_factory(part=project_part.part, quantity=2)
-
-        call_count = 0
-
-        def fake_clear_to_build(self, _build):
-            assert _build == project_build
-            nonlocal call_count
-            call_count += 1
-            raise s.ProjectBuildService.InsufficientInventory(lacking=[])
-
-        monkeypatch.setattr(
-            s.ProjectBuildService, "_clear_to_build", fake_clear_to_build
-        )
-        with pytest.raises(s.ProjectBuildService.InsufficientInventory):
-            s.ProjectBuildService()._complete_build(project_build)
-        project_build.refresh_from_db()
-        assert project_build.completed is None
-        assert call_count == 1
-
-    def test__complete_build__already_completed(self, project_build, monkeypatch):
-        """
-        GIVEN a project build is marked completed
-        WHEN the complete build action is run for the project build
-        THEN no operation is run on the project build
-        """
-        project_build.completed = timezone.now()
-        project_build.save()
-
-        call_count = 0
-
-        def fake_clear_to_build(self, _build):
-            assert _build == project_build
-            nonlocal call_count
-            call_count += 1
-            raise s.ProjectBuildService.InsufficientInventory(lacking=[])
-
-        monkeypatch.setattr(
-            s.ProjectBuildService, "_clear_to_build", fake_clear_to_build
-        )
-
-        s.ProjectBuildService()._complete_build(project_build)
-        assert call_count == 0
-
-    def test_complete_build_calls__complete_build(self, project_build, monkeypatch):
-        call_count = 0
-        print(project_build)
-        project_build.cleared = timezone.now()
-        project_build.save()
-
-        def fake_complete_build(self, _build):
-            assert _build == project_build
-            nonlocal call_count
-            call_count += 1
-
-        monkeypatch.setattr(
-            s.ProjectBuildService, "_complete_build", fake_complete_build
-        )
-        s.ProjectBuildService().complete_build(project_build.pk)
-        assert call_count == 1
-
-    def test_complete_build__bad(self, project_build, monkeypatch):
-        """
-        WHEN the complete build action is called for a non existent project build
-        THEN an exception is raised
-        """
-        with pytest.raises(m.ProjectBuild.DoesNotExist):
-            s.ProjectBuildService().complete_build(1234)
-
-    def test_cancel_build_calls__cancel_build(self, project_build, monkeypatch):
-        call_count = 0
-
-        def fake__cancel_build(self, _build):
-            nonlocal call_count
-            call_count += 1
-
-        monkeypatch.setattr(s.ProjectBuildService, "_cancel_build", fake__cancel_build)
-        s.ProjectBuildService().cancel_build(project_build.pk)
-        assert call_count == 1
-
-    def test__cancel_build(self, project_build, inventory_line_factory, part):
-        """
-        GIVEN part reservations exist for a project build
-        WHEN the cancel build action is run for the project build
-        THEN the part reservations are deleted
-        AND the inventory lines are credited with the reservation quantities
-        AND the project build clear status is cleared
-        """
-        _line = inventory_line_factory(part=part, quantity=10)
-        s.ProjectBuildService()._clear_to_build(project_build)
-        project_build.refresh_from_db()
-        assert project_build.cleared is not None
-        _line.refresh_from_db()
-        assert _line.quantity == 4
-        s.ProjectBuildService()._cancel_build(project_build)
-        _line.refresh_from_db()
-        assert _line.quantity == 10
-        project_build.refresh_from_db()
-        assert project_build.cleared is None
-
-    def test__cancel_build__completed(self, project_build, monkeypatch):
-        """
-        GIVEN a project build has been completed
-        WHEN the cancel build action is run for the project build
-        THEN the project build completed status will be unchanged
-        """
-
-        def fake_delete_reservations(self, _build):
-            assert False
-
-        monkeypatch.setattr(
-            s.ProjectBuildPartReservationService,
-            "delete_reservations",
-            fake_delete_reservations,
-        )
-        project_build.completed = timezone.now()
-        project_build.save()
-        s.ProjectBuildService()._cancel_build(project_build)
-        project_build.refresh_from_db()
-        assert project_build.completed is not None
-
-
-class TestBillOfMaterialsRow:
-    def test_normalize_value(self):
-        """
-        GIVEN a component value in a project version BOM is in the format 2K2
-        AND the SI prefix is greater than 1
-        WHEN the BOM is synced
-        THEN the component value will be normalized to 2.2K
-        AND the SI prefix will be capitalized
-        """
-        row = s.BillOfMaterialsRow(
-            **{
-                "#": 1,
-                "Reference": "T1, T2",
-                "Qty": 2,
-                "PartNum": "ASDF-1234",
-                "Vendor": "Mouser",
-                "Value": "3M3",
-                "Footprint": "Test Footprint",
-            }
-        )
-        assert row.value == "3.3M"
-
-    def test_normalize_value_diode(self):
-        """
-        GIVEN a component value in a project version BOM is in the format 1N4148
-        WHEN the BOM is synced
-        THEN the component value will not be altered
-        """
-        row = s.BillOfMaterialsRow(
-            **{
-                "#": 1,
-                "Reference": "T1, T2",
-                "Qty": 2,
-                "PartNum": "ASDF-1234",
-                "Vendor": "Mouser",
-                "Value": "1N4148",
-                "Footprint": "Test Footprint",
-            }
-        )
-        assert row.value == "1N4148"
-
-    def test_lower_case_si_prefix(self):
-        """
-        GIVEN a component value in a project version BOM is in the format 2U2
-        AND the SI prefix is less than 1
-        WHEN the BOM is synced
-        THEN the component value will be normalized to 2.2u
-        AND the SI prefix will be lower case
-        """
-        row = s.BillOfMaterialsRow(
-            **{
-                "#": 1,
-                "Reference": "T1, T2",
-                "Qty": 2,
-                "PartNum": "ASDF-1234",
-                "Vendor": "Mouser",
-                "Value": "3U3",
-                "Footprint": "Test Footprint",
-            }
-        )
-        assert row.value == "3.3u"
-
-
-class TestMouserPartService:
-    @pytest.fixture
-    def bom_row(self):
-        row = s.BillOfMaterialsRow(
-            **{
-                "#": 1,
-                "Reference": "T1, T2",
-                "Qty": 2,
-                "PartNum": "ASDF-1234",
-                "Vendor": "Mouser",
-                "Value": "great",
-                "Footprint": "Test Footprint",
-            }
-        )
-        return row
-
-    def test__get_footprint(self, footprint, bom_row):
-        """
-        GIVEN a project version BOM row represents a known footprint
-        AND the same row shows the vendor as "Mouser"
-        WHEN _get_footprint is run for the BOM row
-        THEN the known footprint is returned
-        """
-        _footprint = s.MouserPartService()._get_footprint(bom_row)
-        assert footprint == _footprint
-
-    def test__get_footprint_new(self, footprint, bom_row):
-        """
-        GIVEN a project version BOM row represents an unknown footprint
-        AND the same row shows the vendor as "Mouser"
-        WHEN _get_footprint is run for the BOM row
-        THEN a new footprint matching the unknown footprint is created and returned
-        """
-        bom_row.footprint_name = "Other Footprint"
-        _footprint = s.MouserPartService()._get_footprint(bom_row)
-        assert _footprint.name == "Other Footprint"
-        assert _footprint != footprint
-
-    def test__get_package(self, package, bom_row):
-        """
-        GIVEN a project version BOM row represents a known footprint
-        AND the same row shows the vendor as "Mouser"
-        AND the known footprint has an associated package
-        WHEN _get_package is run for the BOM row
-        THEN the package for the known footprint is returned
-        """
-        _package = s.MouserPartService()._get_package(bom_row)
-        assert _package == package
-
-    def test__get_package_new(self, package, bom_row):
-        """
-        GIVEN a project version BOM row represents an unknown footprint
-        AND the same row shows the vendor as "Mouser"
-        WHEN _get_package is run for the BOM row
-        THEN a package (with unknown technology) is created and returned returned
-        """
-        bom_row.footprint_name = "ASDF:Other Footprint"
-        _package = s.MouserPartService()._get_package(bom_row)
-        assert _package != package
-        assert _package.technology == m.CircuitTechnologyEnum.UNKNOWN
-        assert _package.name == "Other Footprint"
-
-    def test__get_part(self, part_factory, bom_row):
-        """
-        GIVEN a project version BOM row represents a known part
-        AND the same row shows the vendor as "Mouser"
-        WHEN _get_part is run for the BOM row
-        THEN the known part is returned
-        """
-        part = part_factory(name="Test Part", value="great", symbol="T")
-        _part = s.MouserPartService()._get_part(bom_row)
-        assert _part == part
-
-    def test__get_part_new(self, part_factory, bom_row, package):
-        """
-        GIVEN a project version BOM row represents an unknown part
-        AND the same row shows the vendor as "Mouser"
-        AND the BOM row component package (gleaned from the BOM footprint) is known
-        WHEN _get_part is run for the BOM row
-        THEN a placeholder part is created which matches the BOM row
-        AND the created part references the appropriate component package
-        """
-        part = part_factory(name="Test Part", value="awful", symbol="T")
-        _part = s.MouserPartService()._get_part(bom_row)
-        assert _part != part
-        assert _part.name == "placeholder"
-        assert _part.value == "great"
-        assert _part.package == package
-        assert _part.symbol == "T"
-        _part.delete()
-
-    def test__get_vendor(self, vendor_mouser):
-        _mouser = s.MouserPartService()._get_vendor()
-        assert _mouser == vendor_mouser
-
-    def test__get_vendor_missing(self, db):
-        with pytest.raises(m.Vendor.DoesNotExist):
-            s.MouserPartService()._get_vendor()
-
-    def test_create_vendor_part(
-        self, bom_row, part_factory, vendor_mouser, broker, worker, monkeypatch
-    ):
-        """
-        GIVEN a project version BOM row represents an unknown part
-        AND the same row shows the vendor as "Mouser"
-        AND the BOM row component package (gleaned from the BOM footprint) is known
-        WHEN create_vendor_part is run for the BOM row
-        THEN a placeholder part is created which matches the BOM row
-        AND the created part references the appropriate component package
-        AND a vendor part is created which references the "PartNum" of the BOM row
-        AND a task to populate the vendor part with actual data will be started
-        """
-        call_count = 0
-
-        def fake_populate(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-
-        monkeypatch.setattr(MouserService, "populate", fake_populate)
-        # This method should _only_ be hit after a part has been found to not
-        #   exist, but it should work fine either way.
-        _vendor_part = s.MouserPartService().create_vendor_part(bom_row)
-        assert _vendor_part.part.name == "placeholder"
-        assert _vendor_part.item_number == "ASDF-1234"
-        assert _vendor_part.url_path == "placeholder"
-
-        broker.join("default")
-        worker.join()
-        assert call_count == 1
-        _vendor_part.part.delete()
-        _vendor_part.delete()
-
-
-class TestProjectVersionBomService:
-    def test__get_vendor_part(self, vendor_part):
-        """
-        GIVEN a BOM row references a known vendor part by matching the columns
-          for "Vendor" and "PartNum"
-        WHEN _get_vendor_part is run for that BOM rown
-        THEN the known vendor part will be returned
-        """
-        _vendor_part = s.ProjectVersionBomService()._get_vendor_part(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "D1, D2",
-                    "Qty": 2,
-                    "PartNum": vendor_part.item_number,
-                    "Vendor": vendor_part.vendor.name,
-                    "Value": "LED",
-                    "Footprint": "asdf6789",
-                }
-            ),
-        )
-        assert _vendor_part == vendor_part
-
-    def test__get_vendor_part__missing(self, vendor_part):
-        """
-        GIVEN a BOM row references an unknown vendor part
-        AND the "Vendor" for the BOM row is not "Mouser"
-        WHEN _get_vendor_part is run for that BOM rown
-        THEN a `MissingVendorPart` exception is raised
-        """
-        with pytest.raises(s.MissingVendorPart):
-            _vendor_part = s.ProjectVersionBomService()._get_vendor_part(
-                row=s.BillOfMaterialsRow(
-                    **{
-                        "#": 1,
-                        "Reference": "D1, D2",
-                        "Qty": 2,
-                        "PartNum": vendor_part.item_number,
-                        "Vendor": "nothing",
-                        "Value": "LED",
-                        "Footprint": "asdf6789",
-                    }
-                ),
-            )
-
-    def test__get_vendor_part__missing_mouser(self, vendor_part_mouser, monkeypatch):
-        """
-        GIVEN a BOM row references an unknown vendor part
-        AND the "Vendor" for the BOM row is "Mouser"
-        WHEN _get_vendor_part is run for that BOM rown
-        THEN the process to create a placeholder vendor part and populate it
-          with real data is initiated
-        AND the placeholder part is returned
-        """
-
-        def fake_create_vendor_part(self, row):
-            # SEE: TestMouserPartService.test_create_vendor_part
-            return vendor_part_mouser
-
-        monkeypatch.setattr(
-            s.MouserPartService, "create_vendor_part", fake_create_vendor_part
-        )
-        _vendor_part = s.ProjectVersionBomService()._get_vendor_part(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "D1, D2",
-                    "Qty": 2,
-                    "PartNum": "asdf1234",
-                    "Vendor": "Mouser",
-                    "Value": "LED",
-                    "Footprint": "asdf6789",
-                }
-            ),
-        )
-        assert _vendor_part == vendor_part_mouser
-
-    def test__get_matching_parts(self, part_factory, footprint):
-        """
-        GIVEN a BOM row references a value and symbol which describes more than
-          one part in the catalog
-        WHEN _get_matching_parts is called for the given BOM row
-        THEN all catalog parts which match the value and symbol will be returned
-        """
-        green_led = part_factory(name="LED Green", value="LED", symbol="D")
-        white_led = part_factory(name="LED White", value="LED", symbol="D")
-        parts = s.ProjectVersionBomService()._get_matching_parts(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "D1, D2",
-                    "Qty": 2,
-                    "PartNum": "asdf1234",
-                    "Vendor": "vendor",
-                    "Value": "LED",
-                    "Footprint": footprint.name,
-                }
-            ),
-        )
-        assert green_led in parts
-        assert white_led in parts
-
-    def test__get_matching_parts__discriminating(self, part_factory, footprint):
-        """
-        GIVEN a BOM row references a symbol which describes more than one part
-          in the catalog
-        AND the BOM row references a value which describes more than one part
-          in the catalog
-        WHEN _get_matching_parts is called for the given BOM row
-        THEN all catalog parts which match the value and symbol will be returned
-        AND any catalog partch which do not match the value or symbol will not
-          be returned
-        """
-
-        log_pot = part_factory(name="Spinny Boi Pot", value="A100K", symbol="RV")
-        lin_pot = part_factory(name="Spinny Boi Pot", value="B100K", symbol="RV")
-        idk_my_bff_jill = part_factory(
-            name="Spinny Boi Pot", value="B100K", symbol="VR"
-        )
-        parts = s.ProjectVersionBomService()._get_matching_parts(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "RV1, RV2",
-                    "Qty": 2,
-                    "PartNum": "asdf1234",
-                    "Vendor": "vendor",
-                    "Value": "B100K",
-                    "Footprint": footprint.name,
-                }
-            ),
-        )
-        assert lin_pot in parts
-        assert log_pot not in parts
-        assert idk_my_bff_jill not in parts
-
-    def test__get_matching_parts__quantity_sorting(
-        self, part_factory, footprint, inventory_line_factory
-    ):
-        """
-        GIVEN a BOM row references a value and symbol which describes more than
-          one part in the catalog
-        AND the parts are in stock
-        WHEN _get_matching_parts is called for the given BOM row
-        THEN all catalog parts which match the value and symbol will be returned
-        AND the parts will be returned sorted descending by the quantity in stock
-        """
-        green_led = part_factory(name="LED Green", value="LED", symbol="D")
-        purple_led = part_factory(name="LED purple", value="LED", symbol="D")
-        white_led = part_factory(name="LED White", value="LED", symbol="D")
-        inventory_line_factory(part=green_led, quantity=53)
-        inventory_line_factory(part=white_led, quantity=47)
-        inventory_line_factory(part=purple_led, quantity=22)
-        parts = s.ProjectVersionBomService()._get_matching_parts(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "D1, D2",
-                    "Qty": 2,
-                    "PartNum": "asdf1234",
-                    "Vendor": "vendor",
-                    "Value": "LED",
-                    "Footprint": footprint.name,
-                }
-            ),
-        )
-        assert green_led == parts[0]
-        assert white_led == parts[1]
-        assert purple_led == parts[2]
-        assert len(parts) == 3
-        for part in parts:
-            if part == green_led:
-                assert part.qty_in_inventory == 53
-            elif part == white_led:
-                assert part.qty_in_inventory == 47
-            elif part == purple_led:
-                assert part.qty_in_inventory == 22
-
-    def test__get_matching_parts__deprioritized(
-        self, part_factory, footprint, inventory_line_factory
-    ):
-        """
-        GIVEN a BOM row references a value and symbol which describes more than
-          one part in the catalog
-        AND any of the parts are marked `is_deprioritized`
-        WHEN _get_matching_parts is called for the given BOM row
-        THEN no parts marked `is_deprioritized` will be returned
-        AND all other catalog parts which match the value and symbol will be
-          returned
-        """
-        green_led = part_factory(name="LED Green", value="LED", symbol="D")
-        white_led = part_factory(name="LED white", value="LED", symbol="D")
-        inventory_line_factory(part=green_led, quantity=53)
-        inventory_line_factory(part=white_led, quantity=22, is_deprioritized=True)
-        parts = s.ProjectVersionBomService()._get_matching_parts(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "D1, D2",
-                    "Qty": 2,
-                    "PartNum": "asdf1234",
-                    "Vendor": "vendor",
-                    "Value": "LED",
-                    "Footprint": footprint.name,
-                }
-            ),
-        )
-        assert white_led not in parts
-
-    def test__get_part_calls__get_vendor_part(self, monkeypatch, vendor_part):
-        """
-        GIVEN a BOM row does reference a vendor and part number
-        WHEN _get_part is run for that BOM row
-        THEN _get_vendor_part is run for that BOM row
-        AND the first result is returned
-        """
-        call_count = 0
-
-        def fake_get_vendor_part(self, *, row):
-            assert row.vendor_name == "vendor"
-            assert row.item_number == "asdf1234"
-            nonlocal call_count
-            call_count += 1
-            return vendor_part
-
-        monkeypatch.setattr(
-            s.ProjectVersionBomService, "_get_vendor_part", fake_get_vendor_part
-        )
-        part = s.ProjectVersionBomService()._get_part(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "F1, F2",
-                    "Qty": 2,
-                    "PartNum": "asdf1234",
-                    "Vendor": "vendor",
-                    "Value": "asdf6789",
-                    "Footprint": "asdf1234",
-                }
-            ),
-        )
-        assert call_count == 1
-        assert part == vendor_part.part
-
-    def test__get_part_calls__get_matching_parts(
-        self, monkeypatch, part_queryset, part
-    ):
-        """
-        GIVEN a BOM row does not reference either a vendor or a part number
-        AND the BOM row references a value and symbol which describes at least
-          one part in the catalog
-        WHEN _get_part is run for that BOM row
-        THEN _get_matching_parts is run for that BOM row
-        AND the first result is returned
-        """
-        call_count = 0
-
-        def fake_get_matching_part(self, *, row):
-            assert row.value == "asdf6789"
-            assert row.footprint_name == "asdf1234"
-            assert row.symbols == {"F"}
-            nonlocal call_count
-            call_count += 1
-            return part_queryset
-
-        monkeypatch.setattr(
-            s.ProjectVersionBomService, "_get_matching_parts", fake_get_matching_part
-        )
-        _part = s.ProjectVersionBomService()._get_part(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "F1, F2",
-                    "Qty": 2,
-                    "PartNum": "asdf",
-                    "Vendor": "",
-                    "Value": "asdf6789",
-                    "Footprint": "asdf1234",
-                }
-            ),
-        )
-        assert call_count == 1
-        assert _part == part
-
-    def test__get_part__missing(self, monkeypatch):
-        """
-        GIVEN a BOM row does not reference either a vendor or a part number
-        AND th BOM row references a value and symbol which describes no part
-        in the catalog
-        WHEN _get_part is run for that BOM row
-        THEN _get_matching_parts is run for that BOM row
-        AND null is returned
-        """
-        call_count = 0
-
-        def fake_get_matching_part(self, *, row):
-            assert row.value == "asdf6789"
-            assert row.footprint_name == "asdf1234"
-            assert row.symbols == {"F"}
-            nonlocal call_count
-            call_count += 1
-            return m.Part.objects.none()
-
-        monkeypatch.setattr(
-            s.ProjectVersionBomService, "_get_matching_parts", fake_get_matching_part
-        )
-        _part = s.ProjectVersionBomService()._get_part(
-            row=s.BillOfMaterialsRow(
-                **{
-                    "#": 1,
-                    "Reference": "F1, F2",
-                    "Qty": 2,
-                    "PartNum": "",
-                    "Vendor": "",
-                    "Value": "asdf6789",
-                    "Footprint": "asdf1234",
-                }
-            ),
-        )
-        assert call_count == 1
-        assert _part is None
+class TestProjectVersionBomServiceSync:
+    """
+    :feature: Bills of Material are Synced to Project Versions yielding Project
+              Parts, and this process can be repeated as needed
+    """
 
     def test__build_bom_url(self, project_version):
         """
-        GIVEN a project and project version exist
-        AND these are correctly configured
-        WHEN _build_bom_url is called for that project version
-        THEN a valid URL is returned
+        :scenario: Project Version Bills of Material will be found from Project
+                   and Project Version attributes
+
+        | GIVEN a project and project version exist
+        | AND these are correctly configured
+        | WHEN _build_bom_url is called for that project version
+        | THEN a valid URL is returned
         """
         ret = s.ProjectVersionBomService()._build_bom_url(project_version)
         assert ret == "https://gitbub.com/fake/fake/raw/v0/nested/deep/test.csv"
 
     def test__sync_footprints(self, project_part):
         """
-        GIVEN a project_part exists which is associated with outdated footprint refs
-        WHEN _sync_footprints is run for the project part providing new footprint refs
-        THEN existing footprint references which were not provided will be deleted
-        AND existing footprint references which are provided will be retained
-        AND non-existing footprint references whic are provided will be created
+        :scenario: Footprint Refs for components will update as the BOM goes
+                   through revisions by resyncing the Project Version
+
+        | GIVEN a project_part exists which is associated with outdated footprint refs
+        | WHEN _sync_footprints is run for the project part providing new footprint refs
+        | THEN existing footprint references which were not provided will be deleted
+        | AND existing footprint references which are provided will be retained
+        | AND non-existing footprint references whic are provided will be created
         """
         _old_footprint_ref = m.ProjectPartFootprintRef.objects.create(
             project_part=project_part,
@@ -1378,12 +67,16 @@ class TestProjectVersionBomService:
         implicit_project_part_factory,
     ):
         """
-        GIVEN a project part references a part
-        AND the given part's package is associated with an ImplicitProjectPart
-        WHEN _sync_implicit_parts is run for the project part
-        THEN a project part is created for the ImplicitProjectPart
-        AND the created project part references an appropriate quantity of parts
-        AND the created project part has the same line number as the given
+        :scenario: Implicit Project Parts will be created whenever a BOM which
+                   uses a Package with implicit parts is synced, and the
+                   quanitities will be appropriate
+
+        | GIVEN a project part references a part
+        | AND the given part's package is associated with an ImplicitProjectPart
+        | WHEN _sync_implicit_parts is run for the project part
+        | THEN a project part is created for the ImplicitProjectPart
+        | AND the created project part references an appropriate quantity of parts
+        | AND the created project part has the same line number as the given
           project part
         """
         implicit_part = part_factory(name="implicit part", symbol="IP")
@@ -1410,14 +103,17 @@ class TestProjectVersionBomService:
         implicit_project_part_factory,
     ):
         """
-        GIVEN a BOM has been synced yielding a project part
-        AND the project part has an associated implicit project part instance
-        AND the ImplicitProjectPart definition has changed such that the
+        :scenario: Implicit Project Parts will be deleted and recreated when a
+                   BOM is re-synced which changes which Packages are use
+
+        | GIVEN a BOM has been synced yielding a project part
+        | AND the project part has an associated implicit project part instance
+        | AND the ImplicitProjectPart definition has changed such that the
           aforementioned project part instance is no longer representing the
           correct part
-        WHEN _sync_implicit_parts is run for the yielded project part
-        THEN the old implicit part instance will be deleted
-        AND a new implicit part instance reflecting the correct part will be
+        | WHEN _sync_implicit_parts is run for the yielded project part
+        | THEN the old implicit part instance will be deleted
+        | AND a new implicit part instance reflecting the correct part will be
           created
         """
         implicit_part = part_factory(name="implicit part", symbol="IP")
@@ -1456,12 +152,15 @@ class TestProjectVersionBomService:
         implicit_project_part_factory,
     ):
         """
-        GIVEN a BOM has been synced yielding a project part
-        AND the project part has an associated implicit project part instance
-        AND the ImplicitProjectPart definitions has changed such that the
+        :scenario: Implicit Project Parts will be updated when a BOM is
+                   re-synced which changes the quantity of components required
+
+        | GIVEN a BOM has been synced yielding a project part
+        | AND the project part has an associated implicit project part instance
+        | AND the ImplicitProjectPart definitions has changed such that the
           quantity of implicit parts called for is different
-        WHEN _sync_implicit_parts is run for the yielded project part
-        THEN the old implicit part instance will be altered to reflect the
+        | WHEN _sync_implicit_parts is run for the yielded project part
+        | THEN the old implicit part instance will be altered to reflect the
           updated quantity
         """
         implicit_part = part_factory(name="implicit part", symbol="IP")
@@ -1497,12 +196,15 @@ class TestProjectVersionBomService:
         implicit_project_part_factory,
     ):
         """
-        GIVEN a BOM has been synced yielding a project part
-        AND the project part has associated implicit project part instances
-        AND the ImplicitProjectPart definitions have not changed
-        WHEN _sync_implicit_parts is run for the yielded project part
-        THEN the existing implicit part instances will not be altered
-        AND no new implicit part instances will be created
+        :scenario: Implicit Project Parts will remain unchanged when a BOM is
+                   re-synced with changes to other rows
+
+        | GIVEN a BOM has been synced yielding a project part
+        | AND the project part has associated implicit project part instances
+        | AND the ImplicitProjectPart definitions have not changed
+        | WHEN _sync_implicit_parts is run for the yielded project part
+        | THEN the existing implicit part instances will not be altered
+        | AND no new implicit part instances will be created
         """
         implicit_part = part_factory(name="implicit part", symbol="IP")
         other_implicit_part = part_factory(name="other_implicit part", symbol="IP")
@@ -1547,17 +249,22 @@ class TestProjectVersionBomService:
 
     def test__sync_row(self, project_version, part, monkeypatch):
         """
-        GIVEN a valid BOM row exists for a project version
-        AND there exists at least one part which will match the attributes of
+        :scenario: Syncing a row from a Bill of Materials will result in a
+                   Project Part with matching Value and Footprint (or vendor
+                   and part number), quantity and footprints will also be
+                   reproduced
+
+        | GIVEN a valid BOM row exists for a project version
+        | AND there exists at least one part which will match the attributes of
           the BOM row
-        WHEN _sync_row is run for the BOM row
-        THEN a project part will be returned
-        AND the project part will reference the aforementioned project version
-        AND the project part will reference an a part with matching "Value"
+        | WHEN _sync_row is run for the BOM row
+        | THEN a project part will be returned
+        | AND the project part will reference the aforementioned project version
+        | AND the project part will reference an a part with matching "Value"
           and reference symbol
-        AND the project part will show the correct part quantity for the
+        | AND the project part will show the correct part quantity for the
           project version
-        AND the project part will reference the footprint references from the
+        | AND the project part will reference the footprint references from the
           BOM row
         """
         _row = s.BillOfMaterialsRow(
@@ -1595,15 +302,22 @@ class TestProjectVersionBomService:
 
     def test__sync_row__missing_vendor_part(self, project_version, monkeypatch):
         """
-        GIVEN a valid BOM row exists for a project version
-        AND there does not exist any part which will match the attributes of
+        :scenario: Syncing a row from a Bill of Materials with a Vendor (other
+                   than "Mouser") and PartNum will result in a Project Part
+                   with a missing part description when an appropriate Part
+                   cannot be found in the system.
+
+        | GIVEN a valid BOM row exists for a project version
+        | AND the BOM row provides a vendor and part number
+        | AND the vendor is not Mouser
+        | AND there does not exist any part which will match the attributes of
           the BOM row
-        WHEN _sync_row is run for the BOM row
-        THEN a project part will be returned
-        AND the project part will reference the aforementioned project version
-        AND the project part will have a missing part description which
+        | WHEN _sync_row is run for the BOM row
+        | THEN a project part will be returned
+        | AND the project part will reference the aforementioned project version
+        | AND the project part will have a missing part description which
           possesses the information in the BOM row
-        AND the project part will not have a reference to a part
+        | AND the project part will not have a reference to a part
         """
         _row = s.BillOfMaterialsRow(
             **{
@@ -1631,13 +345,16 @@ class TestProjectVersionBomService:
 
     def test__sync(self, project_version, monkeypatch, project_part_factory, part):
         """
-        GIVEN a BOM has been synced yielding project parts
-        AND the BOM has been altered such that there are now fewer rows
-        WHEN _sync is run for the BOM
-        THEN _sync_row will be run for each row of the BOM
-        AND any project parts associated with a row removed from the BOM will
+        :scenario: Bills of Material will be retrieved (http) and parsed into
+                   Project Parts
+
+        | GIVEN a BOM has been synced yielding project parts
+        | AND the BOM has been altered such that there are now fewer rows
+        | WHEN _sync is run for the BOM
+        | THEN _sync_row will be run for each row of the BOM
+        | AND any project parts associated with a row removed from the BOM will
           be deleted
-        AND any project parts associated with a retained row from the BOM will
+        | AND any project parts associated with a retained row from the BOM will
           be retained
         """
 
@@ -1651,8 +368,7 @@ class TestProjectVersionBomService:
         def fake_get(url):
             return Closable(
                 b"""Qty,Reference,Vendor,PartNum,Footprint,Value
-3,"A1, A2, A3","test vendor","test-item-number","Test Footprint","asdf"
-"""
+3,"A1, A2, A3","test vendor","test-item-number","Test Footprint","asdf" """
             )
 
         def fake_bom_url(self, project_version):
@@ -1688,15 +404,19 @@ class TestProjectVersionBomService:
         self, project_version, monkeypatch, project_part_factory, part
     ):
         """
-        GIVEN a BOM for a project version has not been synced
-        AND project parts exist for that project version anyhow
-        AND the BOM calls for a part which does not exist
-        WHEN _sync is run for the BOM
-        THEN _sync_row will be run for each row of the BOM
-        AND any project parts which are not associatew with a BOM row will
+        :scenario: When resyncing a Bill of Materials Project Parts which are
+                   not longer represented on the BOM will be deleted and new
+                   Project Parts will be created as needed to represent the BOM
+
+        | GIVEN a BOM for a project version has not been synced
+        | AND project parts exist for that project version anyhow
+        | AND the BOM calls for a part which does not exist
+        | WHEN _sync is run for the BOM
+        | THEN _sync_row will be run for each row of the BOM
+        | AND any project parts which are not associatew with a BOM row will
           be deleted
-        AND project parts will be created for each row in the BOM
-        AND project parts created without a matching part will have a missing
+        | AND project parts will be created for each row in the BOM
+        | AND project parts created without a matching part will have a missing
           part description with all details from the BOM row
         """
 
@@ -1710,8 +430,7 @@ class TestProjectVersionBomService:
         def fake_get(url):
             return Closable(
                 b"""#,Qty,Reference,Vendor,PartNum,Footprint,Value
-1,3,"A1, A2, A3",,,"Unknown Footprint","zxcv"
-"""
+1,3,"A1, A2, A3",,,"Unknown Footprint","zxcv" """
             )
 
         def fake_bom_url(self, project_version):
@@ -1749,6 +468,1615 @@ class TestProjectVersionBomService:
         monkeypatch.setattr(s.ProjectVersionBomService, "_sync", fake_sync)
         s.ProjectVersionBomService().sync(project_version.pk)
         assert call_count == 1
+
+
+class TestBillOfMaterialsRow:
+    """
+    :feature: Bills of Material will be parsed into a format consistent with
+              inventory conventions
+    """
+
+    def test_normalize_value(self):
+        """
+        :scenario: Component values will be converted to decimal notation and SI
+                   prefixes greater than 1 will be capitalized
+
+        | GIVEN a component value in a project version BOM is in the format 2K2
+        | AND the SI prefix is greater than 1
+        | WHEN the BOM is synced
+        | THEN the component value will be normalized to 2.2K
+        | AND the SI prefix will be capitalized
+        """
+        row = s.BillOfMaterialsRow(
+            **{
+                "#": 1,
+                "Reference": "T1, T2",
+                "Qty": 2,
+                "PartNum": "ASDF-1234",
+                "Vendor": "Mouser",
+                "Value": "3M3",
+                "Footprint": "Test Footprint",
+            }
+        )
+        assert row.value == "3.3M"
+
+    def test_normalize_value_diode(self):
+        """
+        :scenario: Component values for diodes will not be altered
+
+        | GIVEN a component value in a project version BOM is in the format 1N4148
+        | WHEN the BOM is synced
+        | THEN the component value will not be altered
+        """
+        row = s.BillOfMaterialsRow(
+            **{
+                "#": 1,
+                "Reference": "T1, T2",
+                "Qty": 2,
+                "PartNum": "ASDF-1234",
+                "Vendor": "Mouser",
+                "Value": "1N4148",
+                "Footprint": "Test Footprint",
+            }
+        )
+        assert row.value == "1N4148"
+
+    def test_lower_case_si_prefix(self):
+        """
+        :scenario: Component values will be converted to decimal notation and SI
+                   prefixes less than 1 will be lower-cased
+
+        | GIVEN a component value in a project version BOM is in the format 2U2
+        | AND the SI prefix is less than 1
+        | WHEN the BOM is synced
+        | THEN the component value will be normalized to 2.2u
+        | AND the SI prefix will be lower case
+        """
+        row = s.BillOfMaterialsRow(
+            **{
+                "#": 1,
+                "Reference": "T1, T2",
+                "Qty": 2,
+                "PartNum": "ASDF-1234",
+                "Vendor": "Mouser",
+                "Value": "3U3",
+                "Footprint": "Test Footprint",
+            }
+        )
+        assert row.value == "3.3u"
+
+
+class TestProjectVersionBomServicePartSelection:
+    """
+    :feature: Parts are selected based on fields on a Bill of Materials
+    """
+
+    def test__get_vendor_part(self, vendor_part):
+        """
+        :scenario: "Vendor" and "PartNum" BOM fields will be used to find Parts
+
+        | GIVEN a BOM row references a known vendor part by matching the columns
+          for "Vendor" and "PartNum"
+        | WHEN _get_vendor_part is run for that BOM rown
+        | THEN the known vendor part will be returned
+        """
+        _vendor_part = s.ProjectVersionBomService()._get_vendor_part(
+            row=s.BillOfMaterialsRow(
+                **{
+                    "#": 1,
+                    "Reference": "D1, D2",
+                    "Qty": 2,
+                    "PartNum": vendor_part.item_number,
+                    "Vendor": vendor_part.vendor.name,
+                    "Value": "LED",
+                    "Footprint": "asdf6789",
+                }
+            ),
+        )
+        assert _vendor_part == vendor_part
+
+    def test__get_vendor_part__missing(self, vendor_part):
+        """
+        :scenario: Unknown "PartNum" BOM fields will raise exceptions unless
+                   the "Vendor" is API enabled
+
+        | GIVEN a BOM row references an unknown "PartNum"
+        | AND the "Vendor" for the BOM row is not "Mouser"
+        | WHEN _get_vendor_part is run for that BOM rown
+        | THEN a `MissingVendorPart` exception is raised
+        """
+        with pytest.raises(s.MissingVendorPart):
+            _vendor_part = s.ProjectVersionBomService()._get_vendor_part(
+                row=s.BillOfMaterialsRow(
+                    **{
+                        "#": 1,
+                        "Reference": "D1, D2",
+                        "Qty": 2,
+                        "PartNum": vendor_part.item_number,
+                        "Vendor": "nothing",
+                        "Value": "LED",
+                        "Footprint": "asdf6789",
+                    }
+                ),
+            )
+
+    def test__get_vendor_part__missing_mouser(self, vendor_part_mouser, monkeypatch):
+        """
+        :scenario: Parts and Vendor Parts will be created and autopopulated for
+                   BOM rows with unknown "PartNum" and the "Vendor" is "Mouser"
+
+        | GIVEN a BOM row references an unknown vendor part
+        | AND the "Vendor" for the BOM row is "Mouser"
+        | WHEN _get_vendor_part is run for that BOM rown
+        | THEN the process to create a placeholder vendor part and populate it
+          with real data is initiated
+        | AND the placeholder part is returned
+        """
+
+        def fake_create_vendor_part(self, row):
+            # SEE: TestMouserPartService.test_create_vendor_part
+            return vendor_part_mouser
+
+        monkeypatch.setattr(
+            s.MouserPartService, "create_vendor_part", fake_create_vendor_part
+        )
+        _vendor_part = s.ProjectVersionBomService()._get_vendor_part(
+            row=s.BillOfMaterialsRow(
+                **{
+                    "#": 1,
+                    "Reference": "D1, D2",
+                    "Qty": 2,
+                    "PartNum": "asdf1234",
+                    "Vendor": "Mouser",
+                    "Value": "LED",
+                    "Footprint": "asdf6789",
+                }
+            ),
+        )
+        assert _vendor_part == vendor_part_mouser
+
+    def test__get_matching_parts(self, part_factory, footprint):
+        """
+        :scenario: Parts are selected by the "Value" and "Footprint" BOM fields
+
+        | GIVEN a BOM row references a value and symbol which describes more than
+          one part in the catalog
+        | WHEN _get_matching_parts is called for the given BOM row
+        | THEN all catalog parts which match the value and symbol will be returned
+        """
+        green_led = part_factory(name="LED Green", value="LED", symbol="D")
+        white_led = part_factory(name="LED White", value="LED", symbol="D")
+        parts = s.ProjectVersionBomService()._get_matching_parts(
+            row=s.BillOfMaterialsRow(
+                **{
+                    "#": 1,
+                    "Reference": "D1, D2",
+                    "Qty": 2,
+                    "PartNum": "asdf1234",
+                    "Vendor": "vendor",
+                    "Value": "LED",
+                    "Footprint": footprint.name,
+                }
+            ),
+        )
+        assert green_led in parts
+        assert white_led in parts
+
+    def test__get_matching_parts__discriminating(self, part_factory, footprint):
+        """
+        :scenario: Parts are not selected if they do not match both "Value" and
+                   "Footprint" BOM rows
+
+        | GIVEN a BOM row references a symbol which describes more than one part
+          in the catalog
+        | AND the BOM row references a value which describes more than one part
+          in the catalog
+        | WHEN _get_matching_parts is called for the given BOM row
+        | THEN all catalog parts which match the value and symbol will be returned
+        | AND any catalog partch which do not match the value or symbol will not
+          be returned
+        """
+
+        log_pot = part_factory(name="Spinny Boi Pot", value="A100K", symbol="RV")
+        lin_pot = part_factory(name="Spinny Boi Pot", value="B100K", symbol="RV")
+        idk_my_bff_jill = part_factory(
+            name="Spinny Boi Pot", value="B100K", symbol="VR"
+        )
+        parts = s.ProjectVersionBomService()._get_matching_parts(
+            row=s.BillOfMaterialsRow(
+                **{
+                    "#": 1,
+                    "Reference": "RV1, RV2",
+                    "Qty": 2,
+                    "PartNum": "asdf1234",
+                    "Vendor": "vendor",
+                    "Value": "B100K",
+                    "Footprint": footprint.name,
+                }
+            ),
+        )
+        assert lin_pot in parts
+        assert log_pot not in parts
+        assert idk_my_bff_jill not in parts
+
+    def test__get_matching_parts__quantity_sorting(
+        self, part_factory, footprint, inventory_line_factory
+    ):
+        """
+        :scenario: When a BOM row matches more than one Part, the Part with the
+                   lowest stock will be preferred
+
+        | GIVEN a BOM row references a value and symbol which describes more than
+          one part in the catalog
+        | AND the parts are in stock
+        | WHEN _get_matching_parts is called for the given BOM row
+        | THEN all catalog parts which match the value and symbol will be returned
+        | AND the parts will be returned sorted descending by the quantity in stock
+        """
+        green_led = part_factory(name="LED Green", value="LED", symbol="D")
+        purple_led = part_factory(name="LED purple", value="LED", symbol="D")
+        white_led = part_factory(name="LED White", value="LED", symbol="D")
+        inventory_line_factory(part=green_led, quantity=53)
+        inventory_line_factory(part=white_led, quantity=47)
+        inventory_line_factory(part=purple_led, quantity=22)
+        parts = s.ProjectVersionBomService()._get_matching_parts(
+            row=s.BillOfMaterialsRow(
+                **{
+                    "#": 1,
+                    "Reference": "D1, D2",
+                    "Qty": 2,
+                    "PartNum": "asdf1234",
+                    "Vendor": "vendor",
+                    "Value": "LED",
+                    "Footprint": footprint.name,
+                }
+            ),
+        )
+        assert green_led == parts[0]
+        assert white_led == parts[1]
+        assert purple_led == parts[2]
+        assert len(parts) == 3
+        for part in parts:
+            if part == green_led:
+                assert part.qty_in_inventory == 53
+            elif part == white_led:
+                assert part.qty_in_inventory == 47
+            elif part == purple_led:
+                assert part.qty_in_inventory == 22
+
+    def test__get_matching_parts__deprioritized(
+        self, part_factory, footprint, inventory_line_factory
+    ):
+        """
+        :scenario: When a BOM row matches more than one Part, the deprioritized
+                   Part will not be preferred
+
+        | GIVEN a BOM row references a value and symbol which describes more than
+          one part in the catalog
+        | AND any of the parts are marked `is_deprioritized`
+        | WHEN _get_matching_parts is called for the given BOM row
+        | THEN no parts marked `is_deprioritized` will be returned
+        | AND all other catalog parts which match the value and symbol will be
+          returned
+        """
+        green_led = part_factory(name="LED Green", value="LED", symbol="D")
+        white_led = part_factory(name="LED white", value="LED", symbol="D")
+        inventory_line_factory(part=green_led, quantity=53)
+        inventory_line_factory(part=white_led, quantity=22, is_deprioritized=True)
+        parts = s.ProjectVersionBomService()._get_matching_parts(
+            row=s.BillOfMaterialsRow(
+                **{
+                    "#": 1,
+                    "Reference": "D1, D2",
+                    "Qty": 2,
+                    "PartNum": "asdf1234",
+                    "Vendor": "vendor",
+                    "Value": "LED",
+                    "Footprint": footprint.name,
+                }
+            ),
+        )
+        assert white_led not in parts
+
+    def test__get_part_calls__get_vendor_part(self, monkeypatch, vendor_part):
+        """
+        :scenario: "Vendor" and "PartNum" fields on BOM rows will resolve to a
+                   single Vendor Part
+
+        | GIVEN a BOM row does reference a vendor and part number
+        | WHEN _get_part is run for that BOM row
+        | THEN _get_vendor_part is run for that BOM row
+        | AND the first result is returned
+        """
+        call_count = 0
+
+        def fake_get_vendor_part(self, *, row):
+            assert row.vendor_name == "vendor"
+            assert row.item_number == "asdf1234"
+            nonlocal call_count
+            call_count += 1
+            return vendor_part
+
+        monkeypatch.setattr(
+            s.ProjectVersionBomService, "_get_vendor_part", fake_get_vendor_part
+        )
+        part = s.ProjectVersionBomService()._get_part(
+            row=s.BillOfMaterialsRow(
+                **{
+                    "#": 1,
+                    "Reference": "F1, F2",
+                    "Qty": 2,
+                    "PartNum": "asdf1234",
+                    "Vendor": "vendor",
+                    "Value": "asdf6789",
+                    "Footprint": "asdf1234",
+                }
+            ),
+        )
+        assert call_count == 1
+        assert part == vendor_part.part
+
+    def test__get_part_calls__get_vendor_part__missing(self, monkeypatch, vendor_part):
+        """
+        :scenario: "Vendor" and "PartNum" fields on BOM rows which do not
+                   resolve to a single part will raise an exception
+
+        | GIVEN a BOM row does reference a vendor and part number
+        | AND the part number is not represented by a vendor part
+        | WHEN _get_part is run for that BOM row
+        | THEN _get_vendor_part is run for that BOM row
+        | AND a MissingVendorPart exception is raised
+        """
+        call_count = 0
+
+        def fake_get_vendor_part(self, *, row):
+            assert row.vendor_name == "vendor"
+            assert row.item_number == "asdf1234"
+            nonlocal call_count
+            call_count += 1
+            raise s.MissingVendorPart("asdf")
+
+        monkeypatch.setattr(
+            s.ProjectVersionBomService, "_get_vendor_part", fake_get_vendor_part
+        )
+        with pytest.raises(s.MissingVendorPart):
+            part = s.ProjectVersionBomService()._get_part(
+                row=s.BillOfMaterialsRow(
+                    **{
+                        "#": 1,
+                        "Reference": "F1, F2",
+                        "Qty": 2,
+                        "PartNum": "asdf1234",
+                        "Vendor": "vendor",
+                        "Value": "asdf6789",
+                        "Footprint": "asdf1234",
+                    }
+                ),
+            )
+        assert call_count == 1
+
+    def test__get_part_calls__get_matching_parts(
+        self, monkeypatch, part_queryset, part
+    ):
+        """
+        :scenario: BOM rows without "Vendor" or "PartNum" fields will be matched
+                   to Parts by "Value" and "Footprint" fields
+
+        | GIVEN a BOM row does not reference either a vendor or a part number
+        | AND the BOM row references a value and symbol which describes at least
+          one part in the catalog
+        | WHEN _get_part is run for that BOM row
+        | THEN _get_matching_parts is run for that BOM row
+        | AND the first result is returned
+        """
+        call_count = 0
+
+        def fake_get_matching_part(self, *, row):
+            assert row.value == "asdf6789"
+            assert row.footprint_name == "asdf1234"
+            assert row.symbols == {"F"}
+            nonlocal call_count
+            call_count += 1
+            return part_queryset
+
+        monkeypatch.setattr(
+            s.ProjectVersionBomService, "_get_matching_parts", fake_get_matching_part
+        )
+        _part = s.ProjectVersionBomService()._get_part(
+            row=s.BillOfMaterialsRow(
+                **{
+                    "#": 1,
+                    "Reference": "F1, F2",
+                    "Qty": 2,
+                    "PartNum": "asdf",
+                    "Vendor": "",
+                    "Value": "asdf6789",
+                    "Footprint": "asdf1234",
+                }
+            ),
+        )
+        assert call_count == 1
+        assert _part == part
+
+    def test__get_part__missing(self, monkeypatch):
+        """
+        :scenario: BOM rows without "Vendor" or "PartNum" fields and which do
+                   not match any Parts by "Value" and "Footprint" fields will
+                   not match to any Part
+
+        | GIVEN a BOM row does not reference either a vendor or a part number
+        | AND th BOM row references a value and symbol which describes no part
+          in the catalog
+        | WHEN _get_part is run for that BOM row
+        | THEN _get_matching_parts is run for that BOM row
+        | AND null is returned
+        """
+        call_count = 0
+
+        def fake_get_matching_part(self, *, row):
+            assert row.value == "asdf6789"
+            assert row.footprint_name == "asdf1234"
+            assert row.symbols == {"F"}
+            nonlocal call_count
+            call_count += 1
+            return m.Part.objects.none()
+
+        monkeypatch.setattr(
+            s.ProjectVersionBomService, "_get_matching_parts", fake_get_matching_part
+        )
+        _part = s.ProjectVersionBomService()._get_part(
+            row=s.BillOfMaterialsRow(
+                **{
+                    "#": 1,
+                    "Reference": "F1, F2",
+                    "Qty": 2,
+                    "PartNum": "",
+                    "Vendor": "",
+                    "Value": "asdf6789",
+                    "Footprint": "asdf1234",
+                }
+            ),
+        )
+        assert call_count == 1
+        assert _part is None
+
+
+class TestMouserPartService:
+    """
+    :feature: Parts appearing on BOMs with Vendor "Mouser" will be autopopulated
+              with data from the Mouser API
+    """
+
+    @pytest.fixture
+    def bom_row(self):
+        row = s.BillOfMaterialsRow(
+            **{
+                "#": 1,
+                "Reference": "T1, T2",
+                "Qty": 2,
+                "PartNum": "ASDF-1234",
+                "Vendor": "Mouser",
+                "Value": "great",
+                "Footprint": "Test Footprint",
+            }
+        )
+        return row
+
+    def test__get_footprint(self, footprint, bom_row):
+        """
+        :scenario: Footprints listed in the BOM will be used
+
+        | GIVEN a project version BOM row represents a known footprint
+        | AND the same row shows the vendor as "Mouser"
+        | WHEN _get_footprint is run for the BOM row
+        | THEN the known footprint is returned
+        """
+        _footprint = s.MouserPartService()._get_footprint(bom_row)
+        assert footprint == _footprint
+
+    def test__get_footprint_new(self, footprint, bom_row):
+        """
+        :scenario: Footprints listed in "Mouser" BOM rows will be created if
+                   necessary
+
+        | GIVEN a project version BOM row represents an unknown footprint
+        | AND the same row shows the vendor as "Mouser"
+        | WHEN _get_footprint is run for the BOM row
+        | THEN a new footprint matching the unknown footprint is created and returned
+        """
+        bom_row.footprint_name = "Other Footprint"
+        _footprint = s.MouserPartService()._get_footprint(bom_row)
+        assert _footprint.name == "Other Footprint"
+        assert _footprint != footprint
+
+    def test__get_package(self, package, bom_row):
+        """
+        :scenario: Footprints imply a component Package
+
+        | GIVEN a project version BOM row represents a known footprint
+        | AND the same row shows the vendor as "Mouser"
+        | AND the known footprint has an associated package
+        | WHEN _get_package is run for the BOM row
+        | THEN the package for the known footprint is returned
+        """
+        _package = s.MouserPartService()._get_package(bom_row)
+        assert _package == package
+
+    def test__get_package_new(self, package, bom_row):
+        """
+        :scenario: Placeholder Packages will be created as necessary with
+                   ambigious default field values
+
+        | GIVEN a project version BOM row represents an unknown footprint
+        | AND the same row shows the vendor as "Mouser"
+        | WHEN _get_package is run for the BOM row
+        | THEN a package (with unknown technology) is created and returned returned
+        """
+        bom_row.footprint_name = "ASDF:Other Footprint"
+        _package = s.MouserPartService()._get_package(bom_row)
+        assert _package != package
+        assert _package.technology == m.Package.Technology.UNKNOWN
+        assert _package.name == "Other Footprint"
+
+    def test__get_part(self, part_factory, bom_row):
+        """
+        :scenario: Parts represented on "Mouser" BOM rows will resolve to known
+                   Parts
+
+        | GIVEN a project version BOM row represents a known part
+        | AND the same row shows the vendor as "Mouser"
+        | WHEN _get_part is run for the BOM row
+        | THEN the known part is returned
+        """
+        part = part_factory(name="Test Part", value="great", symbol="T")
+        _part = s.MouserPartService()._get_part(bom_row)
+        assert _part == part
+
+    def test__get_part_new(self, part_factory, bom_row, package):
+        """
+        :scenario: Parts represented on "Mouser" BOM rows will be created in the
+                   system when they are previously unknown
+
+        | GIVEN a project version BOM row represents an unknown part
+        | AND the same row shows the vendor as "Mouser"
+        | AND the BOM row component package (gleaned from the BOM footprint) is known
+        | WHEN _get_part is run for the BOM row
+        | THEN a placeholder part is created which matches the BOM row
+        | AND the created part references the appropriate component package
+        """
+        part = part_factory(name="Test Part", value="awful", symbol="T")
+        _part = s.MouserPartService()._get_part(bom_row)
+        assert _part != part
+        assert _part.name == "placeholder"
+        assert _part.value == "great"
+        assert _part.package == package
+        assert _part.symbol == "T"
+        _part.delete()
+
+    def test__get_vendor(self, vendor_mouser):
+        _mouser = s.MouserPartService()._get_vendor()
+        assert _mouser == vendor_mouser
+
+    def test__get_vendor_missing(self, db):
+        with pytest.raises(m.Vendor.DoesNotExist):
+            s.MouserPartService()._get_vendor()
+
+    def test_create_vendor_part(
+        self, bom_row, part_factory, vendor_mouser, broker, worker, monkeypatch
+    ):
+        """
+        :scenario: Parts represented on "Mouser" BOM rows will be represented
+                   with Parts and Vendor Parts which are autopopulated
+
+        | GIVEN a project version BOM row represents an unknown part
+        | AND the same row shows the vendor as "Mouser"
+        | AND the BOM row component package (gleaned from the BOM footprint) is known
+        | WHEN create_vendor_part is run for the BOM row
+        | THEN a placeholder part is created which matches the BOM row
+        | AND the created part references the appropriate component package
+        | AND a vendor part is created which references the "PartNum" of the BOM row
+        | AND a task to populate the vendor part with actual data will be started
+        """
+        call_count = 0
+
+        def fake_populate(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+
+        monkeypatch.setattr(MouserService, "populate", fake_populate)
+        # This method should _only_ be hit after a part has been found to not
+        #   exist, but it should work fine either way.
+        _vendor_part = s.MouserPartService().create_vendor_part(bom_row)
+        assert _vendor_part.part.name == "placeholder"
+        assert _vendor_part.item_number == "ASDF-1234"
+        assert _vendor_part.url_path == "placeholder"
+
+        broker.join("default")
+        worker.join()
+        assert call_count == 1
+        _vendor_part.part.delete()
+        _vendor_part.delete()
+
+
+class TestPartSatisfaction:
+    """
+    :feature: Part Satisfaction is responsive to stock of Parts
+    """
+
+    def test_part_satisfaction_no_inventory(self, part, project_part):
+        """
+        :scenario: Part Satisfaction indicates missing stock for Project
+                   Parts
+
+        | GIVEN a part exists
+        | AND there is no inventory line for the part
+        | WHEN the part satisfaction process is run
+        | THEN no inventory line will be used in fulfillment
+        | AND there will be unfilfilled need
+        """
+        satisfaction = s.PartSatisfaction(
+            part=part, needed=2, project_part=project_part
+        )
+        assert satisfaction.needed == 2
+        assert satisfaction.unfulfilled == 2
+        assert satisfaction.fulfillments == []
+
+    def test_part_satisfaction_insufficient_inventory(
+        self, part, inventory_line_factory, project_part
+    ):
+        """
+        :scenario: Part Satisfaction indicates insufficient stock for Project
+                   Parts
+
+        | GIVEN a part exists
+        | AND the given part has an inventory line with insufficient stock
+        | WHEN the part satisfaction process is run
+        | THEN the inventory line is used for fulfillment
+        | AND there will be unfilfilled need
+        """
+        _line = inventory_line_factory(part=part, quantity=1)
+        satisfaction = s.PartSatisfaction(
+            part=part, needed=2, project_part=project_part
+        )
+        assert satisfaction.needed == 2
+        assert satisfaction.unfulfilled == 1
+        assert satisfaction.fulfillments[0].inventory_line == _line
+        assert satisfaction.fulfillments[0].depletion == 1
+
+    def test_part_satisfaction_sufficient_inventory(
+        self, part, inventory_line_factory, project_part
+    ):
+        """
+        :scenario: Part Satisfaction indicates sufficient stock for Project
+                   Parts
+
+        | GIVEN a part exists
+        | AND the given part has two inventory lines with stock
+        | WHEN the part satisfaction process is run
+        | THEN the inventory line with the least stock is used for fulfillment
+        """
+        _other_line = inventory_line_factory(part=part, quantity=5)
+        _line = inventory_line_factory(part=part, quantity=3)
+        satisfaction = s.PartSatisfaction(
+            part=part, needed=2, project_part=project_part
+        )
+        assert satisfaction.needed == 2
+        assert satisfaction.unfulfilled == 0
+        assert satisfaction.fulfillments[0].inventory_line == _line
+        assert satisfaction.fulfillments[0].depletion == 2
+
+    def test_part_satisfaction_sufficient_inventory_split(
+        self, part, inventory_line_factory, project_part
+    ):
+        """
+        :scenario: Part Satisfaction will utilize stock from more than Inventory
+                   Line
+
+        | GIVEN a part exists
+        | AND the given part has two inventory lines with stock
+        | AND one of the inventory lines does not have enough stock for the project
+        | WHEN the part satisfaction process is run
+        | THEN the inventory line with the least stock is used for fulfillment first
+        | AND the inventory line with the most stock is used for the remainder
+        """
+        _other_line = inventory_line_factory(part=part, quantity=5)
+        _line = inventory_line_factory(part=part, quantity=3)
+        satisfaction = s.PartSatisfaction(
+            part=part, needed=4, project_part=project_part
+        )
+        assert satisfaction.needed == 4
+        assert satisfaction.unfulfilled == 0
+        assert satisfaction.fulfillments[0].inventory_line == _line
+        assert satisfaction.fulfillments[0].depletion == 3
+        assert satisfaction.fulfillments[1].inventory_line == _other_line
+        assert satisfaction.fulfillments[1].depletion == 1
+
+    def test_part_satisfaction_sufficient_inventory_deprioritized(
+        self, part, inventory_line_factory, project_part
+    ):
+        """
+        :scenario: Part Satisfaction will respect (de-)prioritization
+
+        | GIVEN a part exists
+        | AND the given part has a deprioritized inventory line with stock
+        | AND the given part has an inventory line with stock
+        | WHEN the part satisfaction process is run
+        | THEN the non deprioritized inventory line will be used
+        """
+        _line = inventory_line_factory(part=part, quantity=2, is_deprioritized=True)
+        _other_line = inventory_line_factory(part=part, quantity=5)
+        _third_line = inventory_line_factory(
+            part=part, quantity=3, is_deprioritized=True
+        )
+        satisfaction = s.PartSatisfaction(
+            part=part, needed=2, project_part=project_part
+        )
+        assert satisfaction.needed == 2
+        assert satisfaction.unfulfilled == 0
+        assert satisfaction.fulfillments[0].inventory_line == _other_line
+        assert satisfaction.fulfillments[0].depletion == 2
+
+
+class TestProjectBuildServiceClearToBuild:
+    """
+    :feature: Project Builds will be Cleared when sufficient stock of Parts are
+              reserved to cover all Project Parts
+    """
+
+    def test_clear_to_build_calls__clear_to_build(self, project_build, monkeypatch):
+        """
+        :scenario: Clear To Build Wrapper calls Clear To Build Process for
+                   Project Builds
+
+        | GIVEN a project build exists
+        | WHEN the clear to build wrapper is called for the given project
+          build
+        | THEN the clear to build process is called for the given project
+          build
+        """
+        call_count = 0
+
+        def fake_clear_to_build(self, _build):
+            assert _build == project_build
+            nonlocal call_count
+            call_count += 1
+
+        monkeypatch.setattr(
+            s.ProjectBuildService, "_clear_to_build", fake_clear_to_build
+        )
+        s.ProjectBuildService().clear_to_build(project_build.pk)
+        assert call_count == 1
+
+    def test_clear_to_build__no_build(self, project_build):
+        """
+        :scenario: Clear To Build Wrapper ignores non-extant Project Builds
+
+        | GIVEN a project build exists
+        | AND the given project build has been completed
+        | WHEN the clear to build wrapper is called for the given project
+          build
+        | THEN an exception is raised
+
+        """
+        project_build.completed = timezone.now()
+        project_build.save()
+
+        with pytest.raises(m.ProjectBuild.DoesNotExist):
+            s.ProjectBuildService().clear_to_build(project_build.pk)
+
+    def test_clear_to_build__insufficient_inventory(self, project_build, monkeypatch):
+        def fake_clear_to_build(self, _build):
+            raise s.ProjectBuildService.InsufficientInventory(lacking=[])
+
+        monkeypatch.setattr(
+            s.ProjectBuildService, "_clear_to_build", fake_clear_to_build
+        )
+        assert s.ProjectBuildService().clear_to_build(project_build.pk) == []
+
+    def test__clear_to_build(self, project_part, project_build, inventory_line_factory):
+        """
+        :scenario: Inventory contains reserves stock to complete a Project
+                   Build
+
+        | GIVEN a part is used in a project
+        | AND there is enough stock of the given part to complete the project
+        | WHEN the project clear to build process is run
+        | THEN the project will be marked as cleared
+        | AND a reservation will be made for all the quantity of parts needed
+        | AND the quantity of the parts will be deducted from the inventory for the part
+        """
+        _line = inventory_line_factory(part=project_part.part, quantity=10)
+        s.ProjectBuildService()._clear_to_build(project_build)
+        assert project_build.part_reservations.count() == 1
+        assert len(m.InventoryAction.objects.all()) == 1
+        action = m.InventoryAction.objects.all()[0]
+        assert action.inventory_line == _line
+        assert action.delta == -6
+        assert action.order_line is None
+        assert action.build == project_build
+        _line.refresh_from_db()
+        assert _line.quantity == 4
+        s.ProjectBuildPartReservationService().delete_reservations(
+            project_build.part_reservations.all()
+        )
+        _line.refresh_from_db()
+        assert _line.quantity == 10
+        assert project_build.cleared is not None
+
+    def test__clear_to_build__not(
+        self, project_part, vendor_part, project_build, inventory_line_factory
+    ):
+        """
+        :scenario: Inventory lacks sufficient stock to complete a Project Build
+
+        | GIVEN a part is used in a project
+        | AND there is not enough stock of the given part to complete the project
+        | WHEN the project clear to build process is run
+        | THEN the project will not be marked clear to build
+        | AND the part and quantity of shortfall will be persisted
+        """
+        _line = inventory_line_factory(part=project_part.part, quantity=1)
+
+        with pytest.raises(s.ProjectBuildService.InsufficientInventory):
+            s.ProjectBuildService()._clear_to_build(project_build)
+        assert project_build.shortfalls.all().count() == 1
+        assert project_build.shortfalls.all()[0].quantity == 5
+        assert project_build.shortfalls.all()[0].part == project_part.part
+        project_build.refresh_from_db
+        assert project_build.cleared is None
+
+    def test__clear_to_build__accumulates_by_part(
+        self, project_build, project_part_factory, inventory_line_factory, part
+    ):
+        """
+        :scenario: Clear To Build Process combines like Project Parts when
+                   reserving Parts
+
+        | GIVEN a the same part is used as two separate project parts
+        | WHEN the project clear to build process is run
+        | THEN only one reservation for the part will be created
+        | AND the full quantity of parts will be reserved
+        """
+        _line = inventory_line_factory(part=part, quantity=10)
+        project_part_factory(
+            project_version=project_build.project_version,
+            part=part,
+            quantity=1,
+            line_number=2,
+        )
+        reservations = s.ProjectBuildService()._clear_to_build(project_build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.delta == -9
+        _line.refresh_from_db()
+        assert _line.quantity == 1
+        s.ProjectBuildPartReservationService().delete_reservations(
+            project_build.part_reservations.all()
+        )
+        _line.refresh_from_db()
+        assert _line.quantity == 10
+
+    def test__clear_to_build__excluded_part(
+        self,
+        project_part,
+        project_build,
+        project_part_factory,
+        part,
+        part_factory,
+        inventory_line_factory,
+    ):
+        """
+        :scenario: Clear To Build Process ignores excluded Project Parts
+
+        | GIVEN a project build marks a given part as exluded
+        | WHEN the project clear to build process is run
+        | THEN no reservation is made for the excluded part
+        """
+        _line = inventory_line_factory(part=project_part.part, quantity=10)
+        excluded_part = part_factory(name="omitted", symbol="O")
+        excluded_project_part = project_part_factory(
+            part=excluded_part,
+            project_version=project_build.project_version,
+            line_number=2,
+            quantity=1,
+            is_optional=False,
+        )
+        project_build.excluded_project_parts.add(excluded_project_part)
+        reservations = s.ProjectBuildService()._clear_to_build(project_build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.inventory_line.part == part
+        project_build.excluded_project_parts.clear()
+        s.ProjectBuildPartReservationService().delete_reservations(
+            project_build.part_reservations.all()
+        )
+
+    def test__clear_to_build__equivalent_part(
+        self,
+        project_part,
+        project_build,
+        part,
+        part_factory,
+        inventory_line_factory,
+    ):
+        """
+        :scenario: Clear To Build Process will fall back to equivalent Parts
+
+        | GIVEN a project uses a part which is not stocked
+        | AND the given part is `equivalent_to` another part which is stocked
+        | WHEN the project clear to build process is run
+        | THEN the other part will be reserved
+        """
+        equivalent_part = part_factory(
+            name="equivalent", symbol="E", equivalent_to=part
+        )
+        _line = inventory_line_factory(part=equivalent_part, quantity=10)
+        reservations = s.ProjectBuildService()._clear_to_build(project_build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.inventory_line.part == equivalent_part
+        project_build.excluded_project_parts.clear()
+        s.ProjectBuildPartReservationService().delete_reservations(
+            project_build.part_reservations.all()
+        )
+
+    def test__clear_to_build__equivalent_part_original_part_stocked(
+        self,
+        project_part,
+        project_build,
+        part,
+        part_factory,
+        inventory_line_factory,
+    ):
+        """
+        :scenario: Clear To Build Process will prefer original Parts over
+                   equivalents
+
+        | GIVEN a project uses a part which is stocked
+        | AND the given part is `equivalent_to` another part which is stocked
+        | WHEN the project clear to build process is run
+        | THEN the original part will be reserved
+        """
+        inventory_line_factory(part=part, quantity=10)
+        equivalent_part = part_factory(
+            name="equivalent", symbol="E", equivalent_to=part
+        )
+        _line = inventory_line_factory(part=equivalent_part, quantity=10)
+        reservations = s.ProjectBuildService()._clear_to_build(project_build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.inventory_line.part == part
+        project_build.excluded_project_parts.clear()
+        s.ProjectBuildPartReservationService().delete_reservations(
+            project_build.part_reservations.all()
+        )
+
+    def test__clear_to_build__substitute_part(
+        self, project_part, project_build, part, part_factory, inventory_line_factory
+    ):
+        """
+        :scenario: Clear To Build Process will not use original Part when
+                   substitute Part is named
+
+        | GIVEN a project uses a part which is stocked
+        | AND the project part includes a `substitute_part` which is stocked
+        | WHEN the project clear to build process is run
+        | THEN the other part will be reserved
+        """
+        inventory_line_factory(part=part, quantity=10)
+        substitute_part = part_factory(name="sub", symbol="S")
+        project_part.substitute_part = substitute_part
+        project_part.save()
+        _line = inventory_line_factory(part=substitute_part, quantity=10)
+        reservations = s.ProjectBuildService()._clear_to_build(project_build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.inventory_line.part == substitute_part
+        project_build.excluded_project_parts.clear()
+        s.ProjectBuildPartReservationService().delete_reservations(
+            project_build.part_reservations.all()
+        )
+
+    def test__clear_to_build__substitute_part_out_of_stock(
+        self, project_part, project_build, part, part_factory, inventory_line_factory
+    ):
+        """
+        :scenario: Clear To Build Process will log a shortfall when substitute
+                   Part is not stocked (even when original part is stocked)
+
+        | GIVEN a project uses a part which is stocked
+        | AND the project part includes a `substitute_part` which is not stocked
+        | WHEN the project clear to build process is run
+        | THEN no part will be reserved
+        | AND a shortfall will be created
+        """
+        inventory_line_factory(part=part, quantity=10)
+        substitute_part = part_factory(name="sub", symbol="S")
+        project_part.substitute_part = substitute_part
+        project_part.save()
+        _line = inventory_line_factory(part=substitute_part, quantity=0)
+        with pytest.raises(s.ProjectBuildService.InsufficientInventory) as exc:
+            reservations = s.ProjectBuildService()._clear_to_build(project_build)
+        assert m.ProjectBuildPartReservation.objects.count() == 0
+        assert m.ProjectBuildPartShortage.objects.count() == 1
+        assert m.ProjectBuildPartShortage.objects.all()[0].part == substitute_part
+        project_build.excluded_project_parts.clear()
+        assert m.ProjectBuildPartShortage.objects.all().delete()
+
+    def test__clear_to_build__equivalent_substitute_part(
+        self, project_part, project_build, part, part_factory, inventory_line_factory
+    ):
+        """
+        :scenario: Clear To Build Process will utilize equivalents to substitute
+                   Parts
+
+        | GIVEN a project uses a part which is stocked
+        | AND the project part includes a `substitute_part` which is not stocked
+        | AND the substitute part is `equivalent_to` another part which is stocked
+        | WHEN the project clear to build process is run
+        | THEN the equivalent part will be reserved
+        """
+        inventory_line_factory(part=part, quantity=10)
+        substitute_part = part_factory(name="sub", symbol="S")
+        equivalent_part = part_factory(
+            name="equivalent", symbol="E", equivalent_to=substitute_part
+        )
+        project_part.substitute_part = substitute_part
+        project_part.save()
+        _line = inventory_line_factory(part=equivalent_part, quantity=10)
+        reservations = s.ProjectBuildService()._clear_to_build(project_build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_action.inventory_line.part == equivalent_part
+        project_build.excluded_project_parts.clear()
+        s.ProjectBuildPartReservationService().delete_reservations(
+            project_build.part_reservations.all()
+        )
+
+
+class TestVendorOrderService:
+    """
+    :feature: Vendor Orders can be generated and fulfilled
+    """
+
+    def test__complete_order_line(
+        self, vendor_order_line_factory, vendor_part, inventory
+    ):
+        """
+        :scenario: Completing an Order Line will create Inventory Line if necessary
+                   and create an Inventory Action
+
+        | GIVEN a vendor order has an order line associated to an inventory
+        | AND no inventory line exists for the order line part
+        | WHEN _complete_order_line is run
+        | THEN an inventory line will be created in the given inventory for the
+          order line part
+        | AND the quantity of parts in the inventory line will be increased by
+          the quantity in the inventory line
+        | AND an inventory line action will be created showing the inventory
+          line, the change in quantity, and the vendor order which generated
+          the action
+        """
+        assert len(m.InventoryLine.objects.all()) == 0
+        order_line = vendor_order_line_factory(vendor_part=vendor_part, quantity=11)
+        s.VendorOrderService()._complete_order_line(order_line)
+        assert len(m.InventoryLine.objects.all()) == 1
+        assert len(m.InventoryAction.objects.all()) == 1
+        inventory_line = m.InventoryLine.objects.all()[0]
+        assert inventory_line.quantity == order_line.quantity
+        assert inventory_line.part == order_line.vendor_part.part
+        assert inventory_line.inventory == inventory
+        action = m.InventoryAction.objects.all()[0]
+        assert action.inventory_line == inventory_line
+        assert action.delta == 11
+        assert action.order_line == order_line
+        assert action.build is None
+        action.delete()
+        inventory_line.delete()
+
+    def test__complete_order_line__existing_inventory(
+        self, vendor_order_line_factory, vendor_part, inventory_line_factory
+    ):
+        """
+        :scenario: Complete Order Line Process will update an Inventory Line and
+                   create an Inventory Action
+
+        | GIVEN a vendor order has an order line associated to an inventory
+        | AND an inventory line exists for the order line part
+        | WHEN _complete_order_line is run
+        | AND the quantity of parts in the inventory line will be increased by
+          the quantity in the inventory line
+        | AND an inventory line action will be created showing the inventory
+          line, the change in quantity, and the vendor order which generated
+          the action
+        """
+        inventory_line = inventory_line_factory(part=vendor_part.part, quantity=3)
+        order_line = vendor_order_line_factory(vendor_part=vendor_part, quantity=11)
+        s.VendorOrderService()._complete_order_line(order_line)
+        inventory_line.refresh_from_db()
+        assert inventory_line.quantity == 14
+        assert len(m.InventoryAction.objects.all()) == 1
+        action = m.InventoryAction.objects.all()[0]
+        assert action.inventory_line == inventory_line
+        assert action.delta == 11
+        assert action.order_line == order_line
+        assert action.build is None
+        action.delete()
+
+    def test__complete_order(
+        self,
+        vendor_order_line_factory,
+        monkeypatch,
+        vendor_part_factory,
+        vendor_order,
+        part_factory,
+    ):
+        """
+        :scenario: Complete Vendor Order Process will complete each Order Line and
+                   fulfill the Vendor Order
+
+        | GIVEN a vendor order exists with several order lines
+        | WHEN _complete_order is called on the vendor order
+        | THEN _complete_order_line will be called for each order line
+        | AND the vendor order will be marked "fulfilled"
+        """
+        call_args = []
+
+        def fake_complete_order_line(self, order_line):
+            call_args.append(order_line)
+
+        order_lines = []
+        for idx in range(5):
+            part = part_factory(name=f"part{idx}", symbol="R")
+            vendor_part = vendor_part_factory(part=part, item_number=f"test-item-{idx}")
+            order_lines.append(
+                vendor_order_line_factory(vendor_part=vendor_part, quantity=100)
+            )
+
+        monkeypatch.setattr(
+            s.VendorOrderService, "_complete_order_line", fake_complete_order_line
+        )
+        s.VendorOrderService()._complete_order(vendor_order)
+        vendor_order.refresh_from_db()
+        assert vendor_order.fulfilled is not None
+        assert call_args == order_lines
+
+    def test_complete_order(self, monkeypatch, vendor_order):
+        """
+        :scenario: Complete Vendor Order Wrapper Completes only existing
+                   Vendor Orders
+
+        | GIVEN a vendor order exists
+        | WHEN complete_order is called for the vendor order
+        | THEN _complete_order is called for the vendor order
+        """
+        call_count = 0
+
+        def fake_complete_order(self, order):
+            assert order == vendor_order
+            nonlocal call_count
+            call_count += 1
+
+        monkeypatch.setattr(
+            s.VendorOrderService, "_complete_order", fake_complete_order
+        )
+        s.VendorOrderService().complete_order(vendor_order.pk)
+        assert call_count == 1
+
+    def test_complete_order_bad(self, db):
+        """
+        :scenario: Complete Vendor Order Wrapper raises error for non-extant
+                   Vendor Orders
+
+        | WHEN complete_order is called for a non-extant vendor order
+        | THEN an exception is raised
+        """
+        with pytest.raises(m.VendorOrder.DoesNotExist):
+            s.VendorOrderService().complete_order(1234)
+
+    def test_complete_order_fulfilled(self, vendor_order):
+        """
+        :scenario: Complete Vendor Order Wrapper raises error for already
+                   fulfilled Vendor Orders
+
+        | GIVEN a vendor order exists which has already been fulfilled
+        | WHEN complete_order is called for the vendor order
+        | THEN an exception is raised
+        """
+        vendor_order.fulfilled = timezone.now()
+        vendor_order.save()
+        with pytest.raises(m.VendorOrder.DoesNotExist):
+            s.VendorOrderService().complete_order(vendor_order.pk)
+
+    def test__accumulate_shortfalls(
+        self, project_build, part, part_factory, project_build_part_shortage_factory
+    ):
+        """
+        :scenario: Project Build Shortfalls will be binned by Part
+
+        | GIVEN a project build exists
+        | AND the project build has several shortfalls
+        | WHEN _accumulate_shortfalls is called for the project build
+        | THEN any shortfalls which share a common part will be gathered into a
+          single entry with the sum total of component count
+        | AND all shortfalls from the build will be represented in the return
+        """
+        other_part = part_factory(name="other", symbol="O")
+        project_build_part_shortage_factory(
+            part=part, quantity=6, project_build=project_build
+        )
+        project_build_part_shortage_factory(
+            part=part, quantity=12, project_build=project_build
+        )
+        project_build_part_shortage_factory(
+            part=other_part, quantity=3, project_build=project_build
+        )
+        shortfalls = list(s.VendorOrderService()._accumulate_shortfalls(project_build))
+        assert len(shortfalls) == 2
+        if shortfalls[0].part == part:
+            assert shortfalls[0].count == 18
+            assert shortfalls[1].part == other_part
+            assert shortfalls[1].count == 3
+        elif shortfalls[1].part == part:
+            assert shortfalls[1].count == 18
+            assert shortfalls[0].part == other_part
+            assert shortfalls[0].count == 3
+        else:
+            raise Exception("bad shortfalls")
+
+    def test__select_vendor_part(self, part, vendor_part_factory, vendor):
+        """
+        :scenario: Select Vendor Part Process prefers the cheapest Vendor for
+                   the given Part
+
+        | GIVEN a part exists with more than one vendor part
+        | WHEN _select_vendor_part is run for the part
+        | THEN the vendor part with the lowest cost will be returned
+        """
+        cheapest = vendor_part_factory(cost=0.01, part=part)
+        vendor_part_factory(cost=0.02, part=part)
+        vendor_part_factory(cost=0.03, part=part)
+        selected = s.VendorOrderService()._select_vendor_part(part)
+        assert selected == cheapest
+
+    def test__select_vendor_part__none(self, part):
+        """
+        :scenario: Select Vendor Part Process raises when it finds no Part
+
+        | GIVEN a part exists with no vendor part
+        | WHEN _select_vendor_part is run for the part
+        | THEN a MissingVendorPart exception is raised
+        """
+        with pytest.raises(s.MissingVendorPart):
+            s.VendorOrderService()._select_vendor_part(part)
+
+    def test__populate_vendor_order(
+        self, vendor_part, vendor, vendor_order, vendor_order_line, inventory
+    ):
+        """
+        :scenario: Populate Vendor Order Process will add to an existing Order
+                   Line if one exists for a Part
+
+        | GIVEN a vendor part exists for a vendor
+        | AND a vendor order exists for the given vendor
+        | AND a vendor order line exists for the part
+        | WHEN _populate_vendor_order is called for the vendor part providing a
+          quantity
+        | THEN the provided quantity will be added to the existing order line
+        """
+
+        assert vendor_order.lines.count() == 1
+        s.VendorOrderService()._populate_vendor_order(
+            vendor_part=vendor_part, quantity=22, inventory=inventory
+        )
+        vendor_order_line.refresh_from_db()
+        assert vendor_order.lines.count() == 1
+        assert vendor_order_line.quantity == 32
+
+    def test__populate_vendor_order__new_line(
+        self, vendor_part, vendor_order, inventory
+    ):
+        """
+        :scenario: Populate Vendor Order Process will create a new Order Line
+                   in an existing Vendor Order as needed.
+
+        | GIVEN a vendor part exists for a vendor
+        | AND a vendor order exists for the given vendor
+        | AND no vendor order line exists for the part
+        | WHEN _populate_vendor_order is called for the vendor part providing a quantity
+        | THEN a vendor order will be created with the given vendor
+        | AND a vendor order line will be created for the vendor part
+        | AND the provided quantity will be represented in the order line
+        """
+        assert vendor_order.lines.count() == 0
+        s.VendorOrderService()._populate_vendor_order(
+            vendor_part=vendor_part, quantity=22, inventory=inventory
+        )
+        assert vendor_order.lines.count() == 1
+        assert vendor_order.lines.all()[0].quantity == 22
+        assert vendor_order.lines.all()[0].vendor_part == vendor_part
+        vendor_order.lines.all()[0].delete()
+
+    def test__populate_vendor_order__new_order(self, vendor_part, inventory):
+        """
+        :scenario: Populate Vendor Order Process will create a new Vendor Order
+                   when no open Vendor Order exists.
+
+        | GIVEN a vendor part exists for a vendor
+        | AND no vendor order exists for the given vendor
+        | WHEN _populate_vendor_order is called for the vendor part providing a quantity
+        | THEN a vendor order will be created with the given vendor
+        | AND a vendor order line will be created for the vendor part
+        | AND the provided quantity will be represented in the order line
+        """
+        assert m.VendorOrder.objects.count() == 0
+        s.VendorOrderService()._populate_vendor_order(
+            vendor_part=vendor_part, quantity=22, inventory=inventory
+        )
+        assert m.VendorOrder.objects.count() == 1
+        vendor_order = m.VendorOrder.objects.all()[0]
+        assert vendor_order.vendor == vendor_part.vendor
+        assert vendor_order.lines.count() == 1
+        assert vendor_order.lines.all()[0].vendor_part == vendor_part
+        assert vendor_order.lines.all()[0].quantity == 22
+        vendor_order.lines.all()[0].delete()
+        vendor_order.delete()
+
+    def test_generate_vendor_orders(
+        self,
+        project_build,
+        part,
+        part_factory,
+        project_build_part_shortage_factory,
+        vendor_part,
+        vendor_mouser,
+        vendor_part_factory,
+        vendor,
+        inventory,
+    ):
+        """
+        :scenario: Generate Vendor Orders Process will create Vendor Orders and
+                   Order Lines to satisfy any Shortfalls for a Project Build
+
+        | GIVEN a project build exists
+        | AND the project build has several shortfalls to several vendors
+        | AND the project build has shortfalls for parts with no vendor
+        | WHEN generate_vendor_orders is called for the project build
+        | THEN vendor orders will be made to the several vendors
+        | AND each vendor order will have lines for the parts from that vendor
+        | AND shortfalls without a vendor will be ignored
+        """
+        project_build_part_shortage_factory(
+            part=part, quantity=6, project_build=project_build
+        )
+        project_build_part_shortage_factory(
+            part=part, quantity=12, project_build=project_build
+        )
+        other_part = part_factory(name="other", symbol="O")
+        vendor_part_factory(part=other_part, vendor=vendor_mouser)
+        project_build_part_shortage_factory(
+            part=other_part, quantity=3, project_build=project_build
+        )
+        third_part = part_factory(name="third", symbol="T")
+        project_build_part_shortage_factory(
+            part=third_part, quantity=21, project_build=project_build
+        )
+
+        s.VendorOrderService().generate_vendor_orders(project_build.pk)
+        assert m.VendorOrder.objects.count() == 2
+        m.VendorOrder.objects.all().delete()
+        assert m.VendorOrder.objects.count() == 0
+
+    def test_generate_vendor_orders__no_build(self, db):
+        """
+        :scenario: Generate Vendor Orders Proces will ignore non-extand Project
+                   Builds
+
+        | WHEN generate_vendor_orders is called for a non-extant project build
+        | THEN no vendor orders are generated
+        """
+        assert m.VendorOrder.objects.count() == 0
+        s.VendorOrderService().generate_vendor_orders(1234)
+        assert m.VendorOrder.objects.count() == 0
+
+    def test_generate_vendor_orders__no_inventory(self, db, project_build):
+        """
+        :scenario: Generate Vendor Orders Process requires Inventory
+
+        | GIVEN a project build exists
+        | AND no inventory exists
+        | WHEN generate_vendor_orders is called for the project build
+        | THEN no vendor orders are generated
+        """
+
+        assert m.Inventory.objects.count() == 0
+        assert m.VendorOrder.objects.count() == 0
+        s.VendorOrderService().generate_vendor_orders(project_build.pk)
+        assert m.VendorOrder.objects.count() == 0
+
+
+class TestProjectBuildServiceCompletion:
+    """
+    :feature: Project Builds can be completed
+    """
+
+    def test__complete_build(self, project_part, project_build, inventory_line_factory):
+        """
+        :scenario: Cleared Project Build can be completed and Part Reservations
+                   will be utilized
+
+        | GIVEN a project build has been cleared
+        | AND part reservations made
+        | WHEN the complete build action is run for the project build
+        | THEN the project build is marked completed
+        | AND the part reservations are marked utilized
+        """
+        _line = inventory_line_factory(part=project_part.part, quantity=10)
+        project_build.cleared = timezone.now()
+        project_build.save()
+        reservation = m.ProjectBuildPartReservation.objects.create(
+            inventory_action=None,
+            project_build=project_build,
+        )
+        s.ProjectBuildService()._complete_build(project_build)
+        reservation.refresh_from_db()
+        project_build.refresh_from_db()
+        assert reservation.utilized is not None
+        assert project_build.completed is not None
+        reservation.delete()
+
+    def test__complete_build__no_build(
+        self, project_part, project_build, inventory_line_factory, monkeypatch
+    ):
+        """
+        :scenario: Project Build must be cleared before it can be completed
+
+        | GIVEN a project build has not been cleared
+        | AND there is not sufficient inventory to build the project
+        | WHEN the complete build action is run for the project build
+        | THEN the clear to build action is run for the project build
+        | AND the project is not marked completed
+        """
+        _line = inventory_line_factory(part=project_part.part, quantity=2)
+
+        call_count = 0
+
+        def fake_clear_to_build(self, _build):
+            assert _build == project_build
+            nonlocal call_count
+            call_count += 1
+            raise s.ProjectBuildService.InsufficientInventory(lacking=[])
+
+        monkeypatch.setattr(
+            s.ProjectBuildService, "_clear_to_build", fake_clear_to_build
+        )
+        with pytest.raises(s.ProjectBuildService.InsufficientInventory):
+            s.ProjectBuildService()._complete_build(project_build)
+        project_build.refresh_from_db()
+        assert project_build.completed is None
+        assert call_count == 1
+
+    def test__complete_build__already_completed(self, project_build, monkeypatch):
+        """
+        :scenario: An already completed Project Build cannot be completed again
+
+        | GIVEN a project build is marked completed
+        | WHEN the complete build action is run for the project build
+        | THEN no operation is run on the project build
+        """
+        project_build.completed = timezone.now()
+        project_build.save()
+
+        call_count = 0
+
+        def fake_clear_to_build(self, _build):
+            assert _build == project_build
+            nonlocal call_count
+            call_count += 1
+            raise s.ProjectBuildService.InsufficientInventory(lacking=[])
+
+        monkeypatch.setattr(
+            s.ProjectBuildService, "_clear_to_build", fake_clear_to_build
+        )
+
+        s.ProjectBuildService()._complete_build(project_build)
+        assert call_count == 0
+
+    def test_complete_build_calls__complete_build(self, project_build, monkeypatch):
+        """
+        :scenario: Complete Build Wrapper calls Complete Build Process
+
+        | WHEN the complete build wrapper is called for a cleared project build
+        | THEN the complete build process is called for the project build
+        """
+        call_count = 0
+        print(project_build)
+        project_build.cleared = timezone.now()
+        project_build.save()
+
+        def fake_complete_build(self, _build):
+            assert _build == project_build
+            nonlocal call_count
+            call_count += 1
+
+        monkeypatch.setattr(
+            s.ProjectBuildService, "_complete_build", fake_complete_build
+        )
+        s.ProjectBuildService().complete_build(project_build.pk)
+        assert call_count == 1
+
+    def test_complete_build__bad(self, project_build, monkeypatch):
+        """
+        :scenario: Complete Build Wrapper raises for non-extant Project Build
+
+        | WHEN the complete build action is called for a non existent project build
+        | THEN an exception is raised
+        """
+        with pytest.raises(m.ProjectBuild.DoesNotExist):
+            s.ProjectBuildService().complete_build(1234)
+
+
+class TestProjectBuildServiceCancelation:
+    """
+    :feature: Incomplete Project Builds can be cancelled
+    """
+
+    def test_cancel_build_calls__cancel_build(self, project_build, monkeypatch):
+        """
+        :scenario: Cancel Build Wrapper calls Cancel Build Process
+
+        | WHEN the cancel build wrapper is called for a project build
+        | THEN the cancel build process is called for the project build
+        """
+        call_count = 0
+
+        def fake__cancel_build(self, _build):
+            nonlocal call_count
+            call_count += 1
+
+        monkeypatch.setattr(s.ProjectBuildService, "_cancel_build", fake__cancel_build)
+        s.ProjectBuildService().cancel_build(project_build.pk)
+        assert call_count == 1
+
+    def test__cancel_build(self, project_build, inventory_line_factory, part):
+        """
+        :scenario: Cancelling a Project Build will remove reservations, free
+                   stock, and un-clear the Project Build
+
+        | GIVEN part reservations exist for a project build
+        | WHEN the cancel build action is run for the project build
+        | THEN the part reservations are deleted
+        | AND the inventory lines are credited with the reservation quantities
+        | AND the project build clear status is cleared
+        """
+        _line = inventory_line_factory(part=part, quantity=10)
+        s.ProjectBuildService()._clear_to_build(project_build)
+        project_build.refresh_from_db()
+        assert project_build.cleared is not None
+        _line.refresh_from_db()
+        assert _line.quantity == 4
+        s.ProjectBuildService()._cancel_build(project_build)
+        _line.refresh_from_db()
+        assert _line.quantity == 10
+        project_build.refresh_from_db()
+        assert project_build.cleared is None
+
+    def test__cancel_build__completed(self, project_build, monkeypatch):
+        """
+        :scenario: Cancelling a completed Project Build will do nothing
+
+        | GIVEN a project build has been completed
+        | WHEN the cancel build action is run for the project build
+        | THEN the project build completed status will be unchanged
+        """
+
+        def fake_delete_reservations(self, _build):
+            assert False
+
+        monkeypatch.setattr(
+            s.ProjectBuildPartReservationService,
+            "delete_reservations",
+            fake_delete_reservations,
+        )
+        project_build.completed = timezone.now()
+        project_build.save()
+        s.ProjectBuildService()._cancel_build(project_build)
+        project_build.refresh_from_db()
+        assert project_build.completed is not None
 
 
 class TestPartUsage:

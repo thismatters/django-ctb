@@ -82,7 +82,7 @@ class MouserPartService:
         except models.Package.DoesNotExist:
             _, package_name = row.footprint_name.split(":", maxsplit=1)
             package = models.Package.objects.create(
-                technology=models.CircuitTechnologyEnum.UNKNOWN,
+                technology=models.Package.Technology.UNKNOWN,
                 name=package_name,
             )
             package.footprints.add(footprint)

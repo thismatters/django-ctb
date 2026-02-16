@@ -1,38 +1,7 @@
 from django.db import models
 from django.utils import timezone
 
-from django_enumfield import enum
-
-
-class UnitEnum(enum.Enum):
-    NONE = 0
-    OHM = 1
-    FARAD = 2
-    HENRY = 3
-    VOLT = 4
-    AMPERE = 5
-
-    __default__ = NONE
-
-    __labels__ = {
-        NONE: "None",
-        OHM: "Ohm",
-        FARAD: "F",
-        HENRY: "H",
-        VOLT: "V",
-        AMPERE: "A",
-    }
-
-
-class CircuitTechnologyEnum(enum.Enum):
-    THROUGH_HOLE = 0
-    SURFACE_MOUNT = 1
-    UNKNOWN = 2
-
-    __labels__ = {
-        THROUGH_HOLE: "THT",
-        SURFACE_MOUNT: "SMD",
-    }
+from django_ctb import conf  # noqa: F401
 
 
 class Footprint(models.Model):
@@ -45,12 +14,19 @@ class Footprint(models.Model):
 
 
 class Package(models.Model):
-    technology = enum.EnumField(CircuitTechnologyEnum)
+    class Technology(models.IntegerChoices):
+        THROUGH_HOLE = 0
+        SURFACE_MOUNT = 1
+        UNKNOWN = 2
+
+    technology = models.PositiveSmallIntegerField(
+        choices=Technology, default=Technology.UNKNOWN
+    )
     name = models.CharField(max_length=32, help_text="e.g. 0805, or TO-92W")
     footprints = models.ManyToManyField(Footprint, blank=True)
 
     def __str__(self):  # pragma: no cover
-        return f"{self.technology.label} {self.name}"
+        return f"{self.get_technology_display()} {self.name}"
 
 
 class Vendor(models.Model):
@@ -62,6 +38,14 @@ class Vendor(models.Model):
 
 
 class Part(models.Model):
+    class Unit(models.IntegerChoices):
+        NONE = 0
+        OHM = 1
+        FARAD = 2
+        HENRY = 3
+        VOLT = 4
+        AMPERE = 5
+
     name = models.CharField(max_length=64)
     description = models.CharField(max_length=256, null=True, blank=True)
     value = models.CharField(
@@ -74,7 +58,7 @@ class Part(models.Model):
         help_text="as percentage", null=True, blank=True
     )
     loading_limit = models.CharField(max_length=16, null=True, blank=True)
-    unit = enum.EnumField(UnitEnum)
+    unit = models.PositiveSmallIntegerField(choices=Unit, default=Unit.NONE)
     symbol = models.CharField(
         max_length=4,
         help_text="What prefix might this part have on a circuit schematic?",

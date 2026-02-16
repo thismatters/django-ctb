@@ -3,7 +3,7 @@ import logging
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
-from django.conf import settings
+from django_ctb.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class MouserSearchByPartRequestRoot(BaseModel):
 
 class MouserClient:
     def __init__(self):
-        self.api_key = settings.MOUSER_API_KEY
+        self.api_key = settings.CTB_MOUSER_API_KEY
 
     class BadResponse(Exception):
         pass

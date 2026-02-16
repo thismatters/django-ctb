@@ -9,7 +9,9 @@
 .coverage
 .tox
 coverage.xml
-
+data*.json
 
 **/scrapes/
 *.egg-info
+
+docs/build/

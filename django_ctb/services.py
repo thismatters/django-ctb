@@ -143,20 +143,16 @@ class InventoryLineFulfillment:
 
 
 class PartSatisfaction:
-    def __init__(self, *, part, needed, project_part, substitute_part=None):
+    def __init__(self, *, part, needed, project_part):
         self.part = part
-        self.substitute_part = substitute_part
         self.project_part = project_part
         self.needed = needed
         self.unfulfilled = needed
         self.fulfillments = self.calculate_fulfillment()
 
     def calculate_fulfillment(self) -> list[InventoryLineFulfillment]:
-        _part = self.part
-        if self.substitute_part is not None:
-            _part = self.substitute_part
-        _equivalents = [_part]
-        _equivalents.extend(_part.equivalents.all())
+        _equivalents = [self.part]
+        _equivalents.extend(self.part.equivalents.all())
         inventory_lines = models.InventoryLine.objects.filter(
             part__in=_equivalents, is_deprioritized=False
         ).order_by("quantity")
@@ -237,8 +233,7 @@ class ProjectBuildService:
             consolodated_project_parts.setdefault(
                 _pk,
                 {
-                    "part": project_part.part,
-                    "substitute_part": project_part.substitute_part,
+                    "part": project_part.substitute_part or project_part.part,
                     "quantity": 0,
                     "project_part": project_part,
                 },
@@ -253,7 +248,6 @@ class ProjectBuildService:
             part = _part["part"]
             satisfaction = PartSatisfaction(
                 part=part,
-                substitute_part=_part["substitute_part"],
                 needed=_part["quantity"],
                 project_part=_part["project_part"],
             )
@@ -347,8 +341,7 @@ class ProjectBuildService:
         build = (
             models.ProjectBuild.objects.filter(completed__isnull=True)
             # .select_related("part_reservations")
-            .prefetch_related("part_reservations")
-            .get(pk=build_pk)
+            .prefetch_related("part_reservations").get(pk=build_pk)
         )
         return self._cancel_build(build)
 

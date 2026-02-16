@@ -27,3 +27,4 @@ pygraphviz==1.11
 
 # needed for django_ctb
 django-enumfield==3.1
+

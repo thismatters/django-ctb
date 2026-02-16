@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class TaydaScraper:
     name = ""
     symbol = ""
-    technology = models.CircuitTechnologyEnum.THROUGH_HOLE
+    technology = models.Package.Technology.THROUGH_HOLE
     package_name = ""
-    unit = models.UnitEnum.NONE
+    unit = models.Part.Unit.NONE
     volume = 1
     name_regex = None
     name_reject = None
@@ -146,10 +146,10 @@ class TaydaScraper:
 
 class SmdResistorScraper(TaydaScraper):
     name = "SMD Resistor"
-    technology = models.CircuitTechnologyEnum.SURFACE_MOUNT
+    technology = models.Package.Technology.SURFACE_MOUNT
     symbol = "R"
     package_name = "0805"
-    unit = models.UnitEnum.OHM
+    unit = models.Part.Unit.OHM
     volume = 50
     name_regex = re.compile(
         r"(?P<value>[\d.]+[KM]?)\s+Ohm\s+"
@@ -163,9 +163,9 @@ class SmdResistorScraper(TaydaScraper):
 class SmdCapacitorScraper(TaydaScraper):
     name = "SMD Capacitor"
     symbol = "C"
-    technology = models.CircuitTechnologyEnum.SURFACE_MOUNT
+    technology = models.Package.Technology.SURFACE_MOUNT
     package_name = "0805"
-    unit = models.UnitEnum.FARAD
+    unit = models.Part.Unit.FARAD
     volume = 50
     name_regex = re.compile(
         r"(?P<value>[\d.]+\s?[npu]?)F\s+(?:[\d.]+\wF\s+)?"
@@ -181,7 +181,7 @@ class RadialTantalumCapacitorScraper(TaydaScraper):
     name = "Radial Tantalum Capacitor"
     symbol = "C"
     package_name = "Radial Cap D5"
-    unit = models.UnitEnum.FARAD
+    unit = models.Part.Unit.FARAD
     volume = 1
     name_reject = re.compile(".*chip.*", re.I)
     name_regex = re.compile(
@@ -203,7 +203,7 @@ class RadialCapacitorScraper(TaydaScraper):
     name = "Radial Capacitor"
     symbol = "C"
     package_name = "Radial Cap D5"
-    unit = models.UnitEnum.FARAD
+    unit = models.Part.Unit.FARAD
     volume = 1
     name_reject = re.compile(".*axial.*", re.I)
     name_regex = re.compile(
@@ -224,7 +224,7 @@ class RadialCapacitorScraper(TaydaScraper):
 
     def get_package(self, diameter__, **kwargs):
         package, _ = models.Package.objects.get_or_create(
-            technology=models.CircuitTechnologyEnum.THROUGH_HOLE,
+            technology=models.Package.Technology.THROUGH_HOLE,
             name=f"Radial Cap D{diameter__}",
         )
         return package
@@ -234,7 +234,7 @@ class RadialMylarCapacitorScraper(TaydaScraper):
     name = "Radial Mylar Capacitor"
     symbol = "C"
     package_name = "Mylar Cap"
-    unit = models.UnitEnum.FARAD
+    unit = models.Part.Unit.FARAD
     volume = 1
     name_reject = re.compile(".*axial.*", re.I)
     name_regex = re.compile(
@@ -250,7 +250,7 @@ class RadialMylarCapacitorScraper(TaydaScraper):
     def get_package(self, spacing__=None, **kwargs):
         if spacing__ is not None:
             package, _ = models.Package.objects.get_or_create(
-                technology=models.CircuitTechnologyEnum.THROUGH_HOLE,
+                technology=models.Package.Technology.THROUGH_HOLE,
                 name=f"Mylar Cap S{spacing__}",
             )
             return package
@@ -261,7 +261,7 @@ class PolyesterFilmBoxTypeCapacitorScraper(TaydaScraper):
     name = "Polyester Film Box Capacitor"
     symbol = "C"
     package_name = "R82-7.2mm"
-    unit = models.UnitEnum.FARAD
+    unit = models.Part.Unit.FARAD
     volume = 1
     name_reject = re.compile(".*(?:10%|WIMA).*", re.I)
     custom_info_accept = re.compile(r"JB Capacitor.*", re.I)
@@ -281,14 +281,14 @@ class PolyesterFilmBoxTypeCapacitorScraper(TaydaScraper):
 
 class Smd0603CapacitorScraper(SmdCapacitorScraper):
     package_name = "0603"
-    technology = models.CircuitTechnologyEnum.SURFACE_MOUNT
+    technology = models.Package.Technology.SURFACE_MOUNT
 
 
 class CermetTrimmerScraper(TaydaScraper):
     name = "3296W Trimmer"
     symbol = "RV"
     package_name = "3296W"
-    unit = models.UnitEnum.OHM
+    unit = models.Part.Unit.OHM
     name_regex = re.compile(r"(?P<value>[\d]+[KM]?)\s+Ohm\s+.*", re.I)
 
 
@@ -296,7 +296,7 @@ class Cermet3006PTrimmerScraper(TaydaScraper):
     name = "3006P Trimmer"
     symbol = "RV"
     package_name = "3006P"
-    unit = models.UnitEnum.OHM
+    unit = models.Part.Unit.OHM
     name_regex = re.compile(r"(?P<value>[\d]+[KM]?)\s+Ohm\s+.*", re.I)
 
 
@@ -305,7 +305,7 @@ class AlphaPotScraper(TaydaScraper):
     symbol = "RV"
     package_name = "RV16AF-41-15R1"
     # package_name = "RV16A01F-41-15R1"  # Dual gang
-    unit = models.UnitEnum.OHM
+    unit = models.Part.Unit.OHM
     name_reject = re.compile(r".*(?:Tayda).*")
     name_regex = re.compile(r"[^Dd]*(?P<dual__>Dual)?.*")
     custom_info_reject = re.compile(r".*(?:9mm).*", re.I)
@@ -314,7 +314,7 @@ class AlphaPotScraper(TaydaScraper):
     def get_package(self, dual__, **kwargs):
         if dual__ is not None:
             package, _ = models.Package.objects.get_or_create(
-                technology=models.CircuitTechnologyEnum.THROUGH_HOLE,
+                technology=models.Package.Technology.THROUGH_HOLE,
                 name="RV16A01F-41-15R",
             )
             return package
@@ -325,7 +325,7 @@ class SubMiniToggleSwitchScraper(TaydaScraper):
     name = "Sub Mini Toggle Switch"
     symbol = "SW"
     package_name = ""
-    unit = models.UnitEnum.NONE
+    unit = models.Part.Unit.NONE
     name_reject = re.compile(r"^.*Solder Lug", re.I)
     name_accept = re.compile(r"^Sub Mini.*", re.I)
     name_regex = re.compile(
@@ -337,7 +337,7 @@ class SubMiniToggleSwitchScraper(TaydaScraper):
     def get_package(self, value, **kwargs):
         _value, _ = value.split(" ")
         package, _ = models.Package.objects.get_or_create(
-            technology=models.CircuitTechnologyEnum.THROUGH_HOLE,
+            technology=models.Package.Technology.THROUGH_HOLE,
             name=f"2M-{_value.upper()}",
         )
         return package
@@ -350,7 +350,7 @@ class PushButtonScraper(TaydaScraper):
     name = "Push Button"
     symbol = "SW"
     package_name = ""
-    unit = models.UnitEnum.NONE
+    unit = models.Part.Unit.NONE
     name_accept = re.compile(r".*Panel Mount.*", re.I)
     name_regex = re.compile(
         r"Push Button (?:Switch )?(?:Momentary|Latching) Panel Mount "
@@ -362,7 +362,7 @@ class PushButtonScraper(TaydaScraper):
     def get_package(self, value, **kwargs):
         _value = value.replace(" ", "-")
         package, _ = models.Package.objects.get_or_create(
-            technology=models.CircuitTechnologyEnum.THROUGH_HOLE,
+            technology=models.Package.Technology.THROUGH_HOLE,
             name=f"push-button-{_value.upper()}",
         )
         return package

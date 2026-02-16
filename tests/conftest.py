@@ -55,7 +55,7 @@ def footprint(db):
 @pytest.fixture
 def package(db, footprint):
     package = m.Package.objects.create(
-        technology=m.CircuitTechnologyEnum.THROUGH_HOLE,
+        technology=m.Package.Technology.THROUGH_HOLE,
         name="Test Package",
     )
     package.footprints.add(footprint)

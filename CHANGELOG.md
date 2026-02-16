@@ -8,6 +8,15 @@ Changes to this project will be documented in this file.
 ### Fixed
 
 ## [0.0.2]
+### BREAKING CHANGES
+- `django-enumfield` was removed as a dependency in favor of the new `models.IntegerChoices` pattern. To affect this change the migrations for this project had to be re-initialized. **YOU WILL HAVE TO RESET YOUR DATABASE TO MIGRATE FROM 0.0.1 TO 0.0.2** See steps below:
+  - Dump all your existing data to a file: `python manage.py dumpdata django_ctb > data-backup.json`
+  - manually verify that this is accurate!
+  - Downgrade your migrations to nada: `python manage.py migrate django_ctb zero`
+  - Upgrade your django-ctb version to 0.0.2 (your business!)
+  - Run migrations: `python manage.py migrate django_ctb`
+  - Load your datafile: `python manage.py loaddata data-backup.json`
+
 ### Added
 - "optional" project parts can be marked as `excluded` in project builds
 - "equivalent" parts. Parts may be marked as `equivalent_to` another part.
@@ -27,8 +36,13 @@ Changes to this project will be documented in this file.
 - Gherkin scenarios in unittests for service code
 - action for generating vendor orders from project build shortfalls
 - analytics methods for projecting which parts may need to be procured based on historic past usage, current demand, and inventory levels.
-
-
+### Changed
+- `MOUSER_API_KEY` setting prefixed to `CTB_MOUSER_API_KEY`
+- dependency management to `uv` from `pip`
+- supported Python versions to 3.12 thru 3.14
+- supported Django versions to 5.0 thru 6.0
+### Removed
+- `django-enumfield` as a dependency, switched to [IntegerChoices](https://docs.djangoproject.com/en/6.0/ref/models/fields/#field-choices-enum-types)
 ### Fixed
 - Bill of materials link in project version page
 - Fixes to test_project

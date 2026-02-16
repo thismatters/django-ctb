@@ -90,14 +90,16 @@ A thing you are building. This is a thin model with just a name and a url to a g
 #### ProjectVersion
 
 A point-in-time representation of the project.
-Requires a commit ref (commit hash or tag) which can be found in the project, and the path within the repo to the bill of materials.
+Requires a commit ref (branch, tag, or commit hash) which exists in the repository, and the path within the repo to the bill of materials.
+
+It is recommened that you set the `commit_ref` to the default branch for the repo until your bill of materials has stabilized, after this point a git tag is a useful placeholder for the state of a repository at a specific project version. (The author uses tags like `v0`, `v1`, etc. once manufacturing of a project version has begun.)
 
 #### ProjectPart & ProjectPartFootprintRef
 
 Upon `sync`ing (described below), the parts represented on the bill of materials will be associated to the project.
 Each footprint ref (e.g. `R12` and `C3`) that appears in the bill of materials will be represented.
 
-`ProjectPart` may be marked as "optional" (via the `is_optional` attribute), indicating that they may be excluded from a `ProjectBuild`
+`ProjectPart` may be marked as "optional" (via the `is_optional` attribute), indicating that they may be excluded from a `ProjectBuild`. `ProjectPart` may have a `substitute_part` which, when provided, will completely replace the `part` in the clear-to-buld process (adding a `substitute_part` to an already cleared project will have no effect).
 
 #### ImplicitProjectPart
 
@@ -114,6 +116,8 @@ Any `ProjectPart`s which were marked "optional" may be added to the `excluded_pr
 
 When `cleared` (described below), the parts needed to build the lot will be reserved from the inventory.
 When `completed` these reservations will be utilized.
+
+`VendorOrder`s and lines therein can be created for any `ProjectBuild` object which has shortfalls by selecting the project build from the admin index and running the "Generate orders from shortfalls" action.
 
 #### ProjectBuildPartShortage
 
@@ -166,23 +170,31 @@ The fundamental actions that those services provide are described below, each of
 ## Housekeeping
 
 ### TODO
+- Sync version should capture the commit hash of the repo when the BOM is pulled; still respect the `commit_ref`, but provide better traceability.
 - Clear to build should remove any prior shortfalls/be idempotent
+- Incorporate analytics methods as actions... maybe persist top recommendations?
+  - Test robustly
 - Document package
-  - "features" via test docstrings
+  - Installation
+  - Usage
+  - Settings
+  - [x] "features" via test docstrings
+    - [x] Sphinx setup
+    - [x] Add scenario names
+    - [x] Fix formatting  (use line block syntax)
+    - [x] Organize into features
   - UML diagrams
-    - models (autogen)
-    - sequence
-      - full project E2E
-      - BOM revision loops
-      - Build part subsitutions
-      - Vendor orders
+    - [x] models (autogen)
+    - [x] sequence
+      - [x] full project E2E
+        - [x] BOM revision loops
+        - [x] Build part subsitutions
+        - [x] Vendor orders
 - Document workflows -- flowcharts for:
   - Create new project
   - Figuring out what part to use for a design
 
-- Incorporate analytics methods as actions... maybe persist top recommendations?
-
-- Picking order/picking aide (inventory locations?)
+- Picking order/picking aide (inventory locations?) (add arbitrary labels to all models?)
 - Generate shopping carts from vendor orders (may have to introspect on how to add items to cart in Tayda with Charlesproxy)
 
 - Start designing frontend!
