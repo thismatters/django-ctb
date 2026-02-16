@@ -19,7 +19,6 @@ jobs:
         python-version: ${{ matrix.python-version }}
         cache: pip
         cache-dependency-path: |
-          setup.py
           tox.ini
 
     - name: Install dependencies

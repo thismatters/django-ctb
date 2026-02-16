@@ -1,5 +1,7 @@
 from .base import *  # noqa: F403
 
+INSTALLED_APPS.remove("django_extensions")
+
 
 DRAMATIQ_BROKER = {
     "BROKER": "dramatiq.brokers.stub.StubBroker",
