@@ -1,4 +1,5 @@
 @startuml
+
 participant "Vendor" as vendor
 actor "User" as user
 participant "Django CTB" as ctb
@@ -87,7 +88,7 @@ loop Until project build clears
     end
 end
 alt Nominal situation
-    user -> user: Build project (boring)
+    user -> user: Build project (sweet action)
     user -> ctb: Complete project build (action!)
     activate ctb
     loop For each project build reservation

@@ -9,10 +9,9 @@ any weird thing you want to do.
 
 from docutils import nodes
 from docutils.parsers.rst import Directive, directives
-from sphinx.domains import Domain, Index
 from docutils.statemachine import StringList
+from sphinx.domains import Domain
 from sphinx.ext import autodoc
-
 
 # Documenters to specify how BDD docstrings should be composed in the
 #  intermediate document

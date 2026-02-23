@@ -1,17 +1,18 @@
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import patch, Mock
-from django.http import Http404
 from django.contrib import admin as admin_site
-from django.shortcuts import reverse
+from django.http import Http404
+from django.urls import reverse
 from pytest_django.asserts import assertTemplateUsed
 
 from django_ctb import admin
-from django_ctb.mouser.services import MouserService
 from django_ctb import models as m
+from django_ctb.mouser.services import MouserService
 from django_ctb.services import (
     ProjectBuildService,
-    VendorOrderService,
     ProjectVersionBomService,
+    VendorOrderService,
 )
 
 
@@ -54,19 +55,28 @@ class TestExtendibleModelAdminMixin:
     def test_get_object_missing(self, p_get_queryset):
         p_get_queryset.side_effect = m.ProjectVersion.DoesNotExist
         with pytest.raises(Http404):
-            admin.ProjectVersionAdmin(m.ProjectVersion, admin_site)._getobj(None, None)
+            admin.ProjectVersionAdmin(
+                m.ProjectVersion,
+                admin_site,  # type: ignore[invalid-argument-type]
+            )._getobj(None, None)
 
     @patch.object(admin.ProjectVersionAdmin, "get_queryset")
     def test_get_object_present(self, p_get_queryset):
         p_get_queryset.return_value = Mock(get=Mock(return_value="something"))
         assert (
-            admin.ProjectVersionAdmin(m.ProjectVersion, admin_site)._getobj(None, "25")
+            admin.ProjectVersionAdmin(
+                m.ProjectVersion,
+                admin_site,  # type: ignore[invalid-argument-type]
+            )._getobj(None, "25")
             == "something"
         )
 
     def test_view_name(self):
         assert (
-            admin.ProjectVersionAdmin(m.ProjectVersion, admin_site)._view_name("snut")
+            admin.ProjectVersionAdmin(
+                m.ProjectVersion,
+                admin_site,  # type: ignore[invalid-argument-type]
+            )._view_name("snut")
             == "django_ctb_projectversion_snut"
         )
 

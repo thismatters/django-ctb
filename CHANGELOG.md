@@ -7,15 +7,9 @@ Changes to this project will be documented in this file.
 ### Removed
 ### Fixed
 
-## [0.0.2]
-### BREAKING CHANGES
-- `django-enumfield` was removed as a dependency in favor of the new `models.IntegerChoices` pattern. To affect this change the migrations for this project had to be re-initialized. **YOU WILL HAVE TO RESET YOUR DATABASE TO MIGRATE FROM 0.0.1 TO 0.0.2** See steps below:
-  - Dump all your existing data to a file: `python manage.py dumpdata django_ctb > data-backup.json`
-  - manually verify that this is accurate!
-  - Downgrade your migrations to nada: `python manage.py migrate django_ctb zero`
-  - Upgrade your django-ctb version to 0.0.2 (your business!)
-  - Run migrations: `python manage.py migrate django_ctb`
-  - Load your datafile: `python manage.py loaddata data-backup.json`
+## [0.1.0]
+### DATABASE BREAKING CHANGES
+- `django-enumfield` was removed as a dependency in favor of the new `models.IntegerChoices` pattern. To affect this change the migrations for this project had to be re-initialized. **YOU WILL HAVE TO RESET YOUR DATABASE TO MIGRATE FROM 0.0.1 TO 0.0.2**; I'm pretty sure there are no users for ths package at this point, so I'm not sweating it too much. If you are a user with data who wants to migrate I will provide support (within reason) to facilitate the migration without data loss. Please raise an issue on the board!
 
 ### Added
 - "optional" project parts can be marked as `excluded` in project builds
@@ -36,11 +30,16 @@ Changes to this project will be documented in this file.
 - Gherkin scenarios in unittests for service code
 - action for generating vendor orders from project build shortfalls
 - analytics methods for projecting which parts may need to be procured based on historic past usage, current demand, and inventory levels.
+- tracking of commit hash when project version sync occurs.
+- type hints
 ### Changed
 - `MOUSER_API_KEY` setting prefixed to `CTB_MOUSER_API_KEY`
 - dependency management to `uv` from `pip`
 - supported Python versions to 3.12 thru 3.14
 - supported Django versions to 5.0 thru 6.0
+- how project version specify git repo details; there are now separate fields for the git server, the git user, and the git repo.
+- organization of services
+- clear to build functionality to be idempotent
 ### Removed
 - `django-enumfield` as a dependency, switched to [IntegerChoices](https://docs.djangoproject.com/en/6.0/ref/models/fields/#field-choices-enum-types)
 ### Fixed

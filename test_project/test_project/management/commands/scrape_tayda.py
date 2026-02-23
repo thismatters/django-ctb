@@ -1,10 +1,10 @@
-import re
 import io
 import logging
+import re
 
-from django.core.management.base import BaseCommand
-from bs4 import BeautifulSoup
 import cloudscraper
+from bs4 import BeautifulSoup
+from django.core.management.base import BaseCommand
 
 from django_ctb import models
 

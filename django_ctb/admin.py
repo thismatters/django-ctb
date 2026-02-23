@@ -1,32 +1,34 @@
-from django.contrib import admin
-from django.shortcuts import render
 from functools import update_wrapper
+
+from django.contrib import admin
+from django.contrib.admin.utils import unquote
+from django.http import Http404
+from django.shortcuts import render
+from django.urls import path, reverse
 from django.utils.encoding import force_str
 from django.utils.html import format_html
-from django.http import Http404
-from django.contrib.admin.utils import unquote
-from django.urls import path, reverse
-
-from django_ctb.tasks import (
-    sync_project_version,
-    clear_to_build,
-    complete_build,
-    cancel_build,
-    complete_order,
-    populate_mouser_vendor_part,
-    generate_vendor_orders,
-)
 
 from django_ctb import models
+from django_ctb.tasks import (
+    cancel_build,
+    clear_to_build,
+    complete_build,
+    complete_order,
+    generate_vendor_orders,
+    populate_mouser_vendor_part,
+    sync_project_version,
+)
 
 
 class ExtendibleModelAdminMixin:
     def _getobj(self, request, object_id):
-        opts = self.model._meta
+        opts = self.model._meta  # type: ignore[unresolve-attribute]
 
         try:
-            obj = self.get_queryset(request).get(pk=unquote(object_id))
-        except self.model.DoesNotExist:
+            obj = self.get_queryset(  # type: ignore[unresolve-attribute]
+                request,
+            ).get(pk=unquote(object_id))
+        except self.model.DoesNotExist:  # type: ignore[unresolve-attribute]
             # Don't raise Http404 just yet, because we haven't checked
             # permissions yet. We don't want an unauthenticated user to
             # be able to determine whether a given object exists.
@@ -42,12 +44,18 @@ class ExtendibleModelAdminMixin:
 
     def _wrap(self, view):
         def wrapper(*args, **kwargs):
-            return self.admin_site.admin_view(view)(*args, **kwargs)
+            return self.admin_site.admin_view(view)(  # type: ignore[unresolve-attribute]
+                *args,
+                **kwargs,
+            )
 
         return update_wrapper(wrapper, view)
 
     def _view_name(self, name):
-        return f"{self.model._meta.app_label}_{self.model._meta.model_name}_{name}"
+        return (
+            f"{self.model._meta.app_label}_"  # type: ignore[unresolve-attribute]
+            f"{self.model._meta.model_name}_{name}"  # type: ignore[unresolve-attribute]
+        )
 
 
 @admin.register(models.Footprint)
@@ -87,7 +95,7 @@ class VendorOrderAdmin(admin.ModelAdmin):
             complete_order.send(row.pk)
         self.message_user(request, f"{len(queryset)} processes started")
 
-    _complete_order.short_description = "Mark order fulfilled"
+    _complete_order.short_description = "Mark order fulfilled"  # type: ignore[unresolve-attribute]
 
 
 class VendorPartInline(admin.TabularInline):
@@ -137,7 +145,7 @@ class VendorPartAdmin(admin.ModelAdmin):
             populate_mouser_vendor_part.send(row.pk)
         self.message_user(request, f"{len(queryset)} processes started")
 
-    _populate.short_description = "Populate fields (Mouser)"
+    _populate.short_description = "Populate fields (Mouser)"  # type: ignore[unresolve-attribute]
 
 
 @admin.register(models.ImplicitProjectPart)
@@ -151,7 +159,7 @@ class InventoryAdmin(admin.ModelAdmin):
 
 
 class InventoryActionInline(admin.TabularInline):
-    fields = ("delta", "order_line", "build", "created")
+    fields = ("delta", "order_line", "reservation", "created")
     model = models.InventoryAction
 
     extra = 0
@@ -171,13 +179,14 @@ class InventoryLineAdmin(admin.ModelAdmin):
 
 class ProjectVersionInline(admin.TabularInline):
     model = models.ProjectVersion
+    fields = ("revision", "commit_ref", "bom_path", "pcb_url")
 
     extra = 1
 
 
 @admin.register(models.Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ("name", "git_url")
+    list_display = ("name", "git_repo")
     inlines = (ProjectVersionInline,)
 
 
@@ -202,13 +211,14 @@ class ProjectVersionAdmin(ExtendibleModelAdminMixin, admin.ModelAdmin):
     list_filter = ("project",)
     inlines = [MissingPartInline, ProjectBuildInline]
     actions = ("sync_bom",)
+    readonly_fields = ("last_synced_commit",)
 
     def sync_bom(self, request, queryset):
         for row in queryset:
             sync_project_version.send(row.pk)
         self.message_user(request, f"{len(queryset)} processes started")
 
-    sync_bom.short_description = "Sync selected version BOMs"
+    sync_bom.short_description = "Sync selected version BOMs"  # type: ignore[unresolve-attribute]
 
     def missing_part_count(self, obj):  # pragma: no cover
         return obj.project_parts.filter(part__isnull=True).count()
@@ -253,7 +263,7 @@ class ProjectBuildPartShortageInline(admin.TabularInline):
 
 
 class ProjectBuildPartReservationInline(admin.TabularInline):
-    fields = ("inventory_action", "project_part", "utilized")
+    fields = ("inventory_action", "part", "utilized")
     model = models.ProjectBuildPartReservation
     extra = 0
 
@@ -288,10 +298,9 @@ class ProjectBuildAdmin(ExtendibleModelAdminMixin, admin.ModelAdmin):
             .get_queryset(request)
             .prefetch_related(
                 "shortfalls__part",
-                "part_reservations__inventory_action__inventory_line__part__package",
-                "part_reservations__inventory_action__order_line__vendor",
-                "part_reservations__inventory_action",
-                "part_reservations__project_part__part__package",
+                "part_reservations__inventory_actions",
+                "part_reservations__inventory_actions__order_line__vendor",
+                "part_reservations__part__package",
             )
         )
 
@@ -301,14 +310,14 @@ class ProjectBuildAdmin(ExtendibleModelAdminMixin, admin.ModelAdmin):
             reverse(f"admin:{self._view_name('bom')}", kwargs={"object_id": obj.pk}),
         )
 
-    def get_form(self, request, obj, **kwargs):  # pragma: no cover
+    def get_form(
+        self, request, obj, change, **kwargs
+    ):  # pragma: no cover  # type: ignore[invalid-method-override]
         self.obj = obj
-        print(self.obj)
-        return super().get_form(request, obj, **kwargs)
+        return super().get_form(request, obj, change, **kwargs)
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):  # pragma: no cover
         if db_field.name == "excluded_project_parts" and self.obj is not None:
-            print(self.obj.project_version)
             kwargs["queryset"] = models.ProjectPart.objects.filter(
                 project_version=self.obj.project_version,
                 is_optional=True,
@@ -320,21 +329,21 @@ class ProjectBuildAdmin(ExtendibleModelAdminMixin, admin.ModelAdmin):
             clear_to_build.send(row.pk)
         self.message_user(request, f"{len(queryset)} processes started")
 
-    _clear_to_build.short_description = "Clear to build"
+    _clear_to_build.short_description = "Clear to build"  # type: ignore[unresolve-attribute]
 
     def _complete_build(self, request, queryset):
         for row in queryset:
             complete_build.send(row.pk)
         self.message_user(request, f"{len(queryset)} processes started")
 
-    _complete_build.short_description = "Complete build"
+    _complete_build.short_description = "Complete build"  # type: ignore[unresolve-attribute]
 
     def _cancel_build(self, request, queryset):
         for row in queryset:
             cancel_build.send(row.pk)
         self.message_user(request, f"{len(queryset)} processes started")
 
-    _cancel_build.short_description = "Cancel build"
+    _cancel_build.short_description = "Cancel build"  # type: ignore[unresolve-attribute]
 
     def shortfalls(self, obj):  # pragma: no cover
         return obj.shortfalls.count()
@@ -343,7 +352,7 @@ class ProjectBuildAdmin(ExtendibleModelAdminMixin, admin.ModelAdmin):
         generate_vendor_orders.send(list(queryset.values_list("pk", flat=True)))
         self.message_user(request, f"{len(queryset)} processes started")
 
-    _generate_vendor_orders.short_description = "Generate orders from shortfalls"
+    _generate_vendor_orders.short_description = "Generate orders from shortfalls"  # type: ignore[unresolve-attribute]
 
     def get_urls(self):  # pragma: no cover
         urls = super().get_urls()

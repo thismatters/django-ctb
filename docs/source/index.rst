@@ -11,4 +11,6 @@ documentation for details.
    :caption: Contents:
 
    setup
+   guide
    features
+   reference

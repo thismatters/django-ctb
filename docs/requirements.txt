@@ -1,6 +1,7 @@
 # sphinx requirements
 sphinxcontrib_django==2.5
-
+sphinxcontrib_images==1.0.1
+sphinxcontrib-plantuml==0.31
 
 # requirements for the package... in case its dependencies aren't installed otherwise
 Django==5.0.6

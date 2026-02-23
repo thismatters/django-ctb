@@ -23,10 +23,8 @@
   <tr>
     <th>Line</th>
     <th>Refs</th>
+    <th>Part</th>
     <th>Quantity</th>
-    <th>Part</th>
-    <th>Unit Cost</th>
-    <th>Part</th>
     <th>Line</th>
     <th>Qty On Hand</th>
     <th>Qty Projected</th>
@@ -34,30 +32,28 @@
     <tr>
       <td>0</td>
       <td>N/A</td>
-      <td>1</td>
       <td>PCB</td>
-      <td>{{ project_build.project_version.pcb_unit_cost|floatformat:4 }}</td>
-      <td></td>
+      <td>1</td>
       <td></td>
       <td></td>
       <td></td>
     </tr>
   {% for part_reservation in project_build.part_reservations.all %}
     <tr>
-      <td>{{ part_reservation.project_part.line_number }}</td>
-      <td>{{ part_reservation.project_part.footprints }}</td>
-      <td>{{ part_reservation.inventory_action.delta|cut:"-" }}{% if part_reservation.project_part.is_optional %}*{% endif %}</td>
-      {% if part_reservation.inventory_action.inventory_line.part != None %}
-        <td>{{ part_reservation.inventory_action.inventory_line.part }}</td>
-        <td>{{ part_reservation.inventory_action.inventory_line.part.unit_cost }}</td>
-      {% else %}
-        <td>Part not found!</td>
-        <td>-</td>
-      {% endif %}
-      <td><a href="{% url 'admin:django_ctb_part_change' part_reservation.inventory_action.inventory_line.part.pk %}">part</a></td>
-      <td><a href="{% url 'admin:django_ctb_inventoryline_change' part_reservation.inventory_action.inventory_line.pk %}">inv</a></td>
-      <td align="right">{{ part_reservation.inventory_action.inventory_line.quantity_on_hand }}</td>
-      <td align="right">{{ part_reservation.inventory_action.inventory_line.quantity }}</td>
+      <td>{{ part_reservation.line_numbers }}</td>
+      <td>{{ part_reservation.footprints }}</td>
+      <td><a href="{% url 'admin:django_ctb_part_change' part_reservation.part.pk %}">{{ part_reservation.part }}</a></td>
+      {% for inventory_action in part_reservation.inventory_actions.all %}
+        {% if not forloop.first %}
+          </tr>
+            <td colspan="3"></td>
+          <tr>
+        {% endif %}
+        <td>{{ inventory_action.delta|cut:"-" }}</td>
+        <td><a href="{% url 'admin:django_ctb_inventoryline_change' inventory_action.inventory_line.pk %}">inv</a></td>
+        <td align="right">{{ inventory_action.inventory_line.quantity_on_hand }}</td>
+        <td align="right">{{ inventory_action.inventory_line.quantity }}</td>
+      {% endfor %}
     </tr>
   {% endfor %}
   <tr>

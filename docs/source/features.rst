@@ -7,11 +7,23 @@ The unittests in this project are documented using
 practices. The features tested by this project are described comprehensively.
 
 
-.. automodule:: django_ctb.services
+.. automodule:: tests.services.test_sync
    :members:
-   :undoc-members:
+   :member-order: bysource
 
-.. automodule:: tests.test_services
+.. automodule:: tests.services.test_build
+   :members:
+   :member-order: bysource
+
+.. automodule:: tests.services.test_order
+   :members:
+   :member-order: bysource
+
+.. automodule:: tests.mouser.test_services
+   :members:
+   :member-order: bysource
+
+.. automodule:: tests.test_github_services
    :members:
    :member-order: bysource
 

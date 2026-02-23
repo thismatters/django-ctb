@@ -1,7 +1,12 @@
-import requests
+"""
+Client for interacting with the Mouser Search API. Includes essential
+data models for extracting part data.
+"""
+
 import logging
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+import requests
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from django_ctb.conf import settings
 
@@ -9,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 class MouserPricebreak(BaseModel):
+    """
+    Represents minimum order volumes to cost per item break points
+    """
+
     volume: int = Field(alias="Quantity")
     cost: float = Field(alias="Price")
 
@@ -18,11 +27,15 @@ class MouserPricebreak(BaseModel):
 
     @field_validator("cost", mode="before")
     @classmethod
-    def remove_prefix(cls, value: str) -> float:
+    def _remove_prefix(cls, value: str) -> float:
         return float(value.replace("$", ""))
 
 
 class MouserPart(BaseModel):
+    """
+    Represents minimal part data relevant to this inventory
+    """
+
     description: str = Field(alias="Description")
     name: str = Field(alias="ManufacturerPartNumber")  # map to value and name
     price_breaks: list[MouserPricebreak] = Field(alias="PriceBreaks")
@@ -35,20 +48,20 @@ class MouserPart(BaseModel):
 
     @field_validator("url_path", mode="before")
     @classmethod
-    def remove_prefix(cls, value: str) -> str:
+    def _remove_prefix(cls, value: str) -> str:
         return value.replace("https://www.mouser.com", "")
 
 
-class MouserSearchResponse(BaseModel):
+class _MouserSearchResponse(BaseModel):
     number_of_result: int = Field(alias="NumberOfResult")
     parts: list[MouserPart] = Field(alias="Parts")
 
 
-class MouserSearchResponseRoot(BaseModel):
-    search_results: MouserSearchResponse = Field(alias="SearchResults")
+class _MouserSearchResponseRoot(BaseModel):
+    search_results: _MouserSearchResponse = Field(alias="SearchResults")
 
 
-class MouserSearchByPartRequest(BaseModel):
+class _MouserSearchByPartRequest(BaseModel):
     mouser_part_number: str = Field(alias="mouserPartNumber")
 
     model_config = ConfigDict(
@@ -56,8 +69,8 @@ class MouserSearchByPartRequest(BaseModel):
     )
 
 
-class MouserSearchByPartRequestRoot(BaseModel):
-    search_by_part_request: MouserSearchByPartRequest = Field(
+class _MouserSearchByPartRequestRoot(BaseModel):
+    search_by_part_request: _MouserSearchByPartRequest = Field(
         alias="SearchByPartRequest"
     )
 
@@ -67,27 +80,35 @@ class MouserSearchByPartRequestRoot(BaseModel):
 
 
 class MouserClient:
-    def __init__(self):
-        self.api_key = settings.CTB_MOUSER_API_KEY
+    """
+    Client for getting part data from Mouser Search API
+    """
 
     class BadResponse(Exception):
+        """Unexpected response"""
+
         pass
 
     class EmptyResponse(Exception):
+        """Null response"""
+
         pass
 
     def get_part(self, mouser_part_number: str) -> MouserPart:
-        part_request = MouserSearchByPartRequestRoot(
-            search_by_part_request=MouserSearchByPartRequest(
-                mouser_part_number=mouser_part_number
+        """
+        Search for the specifid part number and parse the response.
+        """
+        part_request = _MouserSearchByPartRequestRoot(
+            SearchByPartRequest=_MouserSearchByPartRequest(
+                mouserPartNumber=mouser_part_number
             )
         )
         _data = part_request.model_dump_json(by_alias=True)
-        # logger.warning(f"posting to get data {_data}")
+        logger.debug(f"posting to get data {_data}")
         response = requests.post(
             "https://api.mouser.com/api/v1/search/partnumber",
             data=_data,
-            params={"apiKey": self.api_key},
+            params={"apiKey": settings.CTB_MOUSER_API_KEY},
             headers={"accept": "application/json", "content-type": "application/json"},
         )
         if response.status_code >= 300:
@@ -95,9 +116,11 @@ class MouserClient:
                 f"Part response status code: {response.status_code}: {response.text}"
             )
             raise self.BadResponse
-        # logger.warning(f"Part found! {response.text}")
+        logger.debug(f"Part found! {response.text}")
         try:
-            response_model = MouserSearchResponseRoot.model_validate_json(response.text)
+            response_model = _MouserSearchResponseRoot.model_validate_json(
+                response.text
+            )
         except Exception:
             logger.error(f"Can't validate data: {response.text}")
             raise
@@ -106,6 +129,6 @@ class MouserClient:
                 if part.mouser_part_number == mouser_part_number:
                     return part
         elif response_model.search_results.number_of_result != 1:
-            print(response.text)
+            logger.debug(f"response text: {response.text}")
             raise self.EmptyResponse
         return response_model.search_results.parts[0]

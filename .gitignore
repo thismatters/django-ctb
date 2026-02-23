@@ -10,6 +10,8 @@
 .tox
 coverage.xml
 data*.json
+data*.json.bak
+**/_images/models.png
 
 **/scrapes/
 *.egg-info

@@ -5,7 +5,6 @@
 import os
 import sys
 
-
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
@@ -24,6 +23,8 @@ sys.path.insert(0, os.path.abspath("../.."))
 extensions = [
     "sphinx.ext.autodoc",  # allows reading docstrings from codebase
     "sphinxcontrib_django",  # integrates django better
+    "sphinxcontrib.images",
+    "sphinxcontrib.plantuml",
     "bdd",  # custom documenters and directives for BDD features and scenarios
 ]
 
@@ -37,8 +38,15 @@ exclude_patterns = []
 html_theme = "alabaster"
 html_static_path = ["_static"]
 
+# -- Options for autodoc ----------------------------------------
+
+autodoc_use_legacy_class_based = True
+
 # -- Options for sphinxcontrib-django ----------------------------------------
 
 django_settings = "test_project.test_project.settings.base"
 
-autodoc_use_legacy_class_based = True
+# -- Options for sphinxcontrib-plantuml ----------------------------------------
+
+plantuml = os.environ.get("PLANTUML_COMMAND", "plantuml")
+plantuml_output_format = "svg"

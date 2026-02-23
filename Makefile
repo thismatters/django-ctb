@@ -18,6 +18,4 @@ test:
 	DJANGO_SETTINGS_MODULE=test_project.settings.test uv run pytest --cov=django_ctb --cov-report term-missing tests/$(TEST_PATH)
 uml-diagram:
 	cd test_project && uv run manage.py graph_models --pygraphviz -o models.png django_ctb
-	mv test_project/models.png docs/source/_static/models.png
-feature-files:
-	cd docs && sphinx-apidoc -o source/ ../tests
+	mv test_project/models.png docs/source/_images/models.png

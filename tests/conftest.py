@@ -1,7 +1,7 @@
-import pytest
 import datetime
 
 import dramatiq
+import pytest
 from django.utils import timezone
 
 from django_ctb import models as m
@@ -151,10 +151,10 @@ def inventory(db):
 
 
 @pytest.fixture
-def inventory_line_factory(db, inventory):
+def inventory_line_factory(db, inventory, part):
     lines = []
 
-    def _factory(*, part, quantity, is_deprioritized=False):
+    def _factory(*, part=part, quantity, is_deprioritized=False):
         line = m.InventoryLine.objects.create(
             inventory=inventory,
             part=part,
@@ -169,35 +169,54 @@ def inventory_line_factory(db, inventory):
 
 
 @pytest.fixture
+def inventory_line(inventory_line_factory):
+    return inventory_line_factory(quantity=20)
+
+
+@pytest.fixture
 def project(db):
     project = m.Project.objects.create(
-        name="Test Project", git_url="https://gitbub.com/fake/fake"
+        name="Test Project",
+        git_server=m.Project.GitServer.GITHUB,
+        git_user="fake",
+        git_repo="fake",
     )
     yield project
     project.delete()
 
 
 @pytest.fixture
-def project_version(db, project):
-    version = m.ProjectVersion.objects.create(
-        project=project,
-        revision=0,
-        commit_ref="v0",
-        bom_path="nested/deep/test.csv",
-        pcb_cost=42.69,
-    )
-    yield version
-    version.delete()
+def project_version_factory(db, project):
+    lines = []
+
+    def _factory(*, project=project):
+        line = m.ProjectVersion.objects.create(
+            project=project,
+            revision=0,
+            commit_ref="v0",
+            bom_path="nested/deep/test.csv",
+            pcb_cost=42.69,
+        )
+        lines.append(line)
+        return line
+
+    yield _factory
+    [line.delete() for line in lines]
 
 
 @pytest.fixture
-def project_part_factory(db, part_factory):
+def project_version(db, project_version_factory):
+    return project_version_factory()
+
+
+@pytest.fixture
+def project_part_factory(db, part_factory, part, project_version):
     parts = []
 
     def _factory(
         *,
-        part,
-        project_version,
+        part=part,
+        project_version=project_version,
         line_number=1,
         quantity=2,
         is_implicit=False,
@@ -215,7 +234,11 @@ def project_part_factory(db, part_factory):
         return part
 
     yield _factory
-    [p.delete() for p in parts]
+    for part in parts:
+        try:
+            part.delete()
+        except ValueError:
+            pass
 
 
 @pytest.fixture
@@ -244,7 +267,7 @@ def project_part_footprint_ref_factory(db, project_part):
 
 
 @pytest.fixture
-def project_build_factory(db, project_version, project_part):
+def project_build_factory(db, project_version, project_part_factory):
     lines = []
 
     def _factory(
@@ -252,7 +275,7 @@ def project_build_factory(db, project_version, project_part):
     ):
         line = m.ProjectBuild.objects.create(
             project_version=project_version,
-            quantity=3,
+            quantity=quantity,
             cleared=cleared,
             completed=completed,
         )
@@ -264,7 +287,7 @@ def project_build_factory(db, project_version, project_part):
 
 
 @pytest.fixture
-def project_build(db, project_build_factory):
+def project_build(db, project_build_factory, project_part):
     """
     Creates a `ProjectBuild` using `project_version` and populates it with
     `project_part`
@@ -304,22 +327,27 @@ def vendor_order_line(vendor_order_line_factory):
 
 
 @pytest.fixture
-def inventory_action_factory(db, vendor_order_line_factory):
-    resources = []
+def inventory_action_factory(
+    db,
+    vendor_order_line_factory,
+    inventory_line,
+    project_build_part_reservation_factory,
+):
+    lines = []
 
-    def _factory(*, inventory_line, delta, days_ago=None, **kwargs):
+    def _factory(*, inventory_line=inventory_line, delta, days_ago=None, **kwargs):
         if days_ago is not None:
             kwargs["created"] = timezone.now() - datetime.timedelta(days=days_ago)
-        resource = m.InventoryAction.objects.create(
+        line = m.InventoryAction.objects.create(
             inventory_line=inventory_line,
             delta=delta,
             **kwargs,
         )
-        resources.append(resource)
-        return resource
+        lines.append(line)
+        return line
 
     yield _factory
-    [r.delete() for r in resources]
+    [line.delete() for line in lines]
 
 
 @pytest.fixture
@@ -337,6 +365,30 @@ def project_build_part_shortage_factory(db):
 
     yield _factory
     [line.delete() for line in lines]
+
+
+@pytest.fixture
+def project_build_part_reservation_factory(db, project_build, part):
+    lines = []
+
+    def _factory(*, project_build=project_build, part=part, **kwargs):
+        line = m.ProjectBuildPartReservation.objects.create(
+            project_build=project_build, part=part, **kwargs
+        )
+        lines.append(line)
+        return line
+
+    yield _factory
+    for line in lines:
+        try:
+            line.delete()
+        except ValueError:
+            pass
+
+
+@pytest.fixture
+def project_build_part_reservation(project_build_part_reservation_factory):
+    return project_build_part_reservation_factory()
 
 
 # @pytest.fixture
