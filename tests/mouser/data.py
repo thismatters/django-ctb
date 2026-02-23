@@ -1,44 +1,12 @@
-import requests
-import pytest
-
-from django_ctb.mouser.client import MouserClient
-
-
-class FakeResponse:
-    def __init__(self, text, status_code=200):
-        self.text = text
-        self.status_code = status_code
-
-
-class TestMouserClient:
-    def test_get_part_missing(self, monkeypatch):
-        def fake_post(*args, **kwargs):
-            return FakeResponse(
-                text="""{
+missing_part_response = """{
   "Errors": [],
   "SearchResults": {
     "NumberOfResult": 0,
     "Parts": []
   }
 } """
-            )
 
-        monkeypatch.setattr(requests, "post", fake_post)
-        with pytest.raises(MouserClient.EmptyResponse):
-            mouser_part = MouserClient().get_part("876-ASDFQWERZXCV")
-
-    def test_get_part_bad(self, monkeypatch):
-        def fake_post(*args, **kwargs):
-            return FakeResponse(text="bad", status_code=300)
-
-        monkeypatch.setattr(requests, "post", fake_post)
-        with pytest.raises(MouserClient.BadResponse):
-            mouser_part = MouserClient().get_part("876-ASDFQWERZXCV")
-
-    def test_get_part(self, monkeypatch):
-        def fake_post(*args, **kwargs):
-            return FakeResponse(
-                """{
+get_part_response = """{
   "Errors": [],
   "SearchResults": {
     "NumberOfResult": 1,
@@ -169,21 +137,9 @@ class TestMouserClient:
     ]
   }
 }"""
-            )
 
-        monkeypatch.setattr(requests, "post", fake_post)
-        mouser_part = MouserClient().get_part("863-BAT54SLT1G")
-        assert mouser_part.name == "BAT54SLT1G"
-        assert mouser_part.description == "Schottky Diodes & Rectifiers 30V 225mW Dual"
-        assert (
-            mouser_part.url_path
-            == "/ProductDetail/onsemi/BAT54SLT1G?qs=vLkC5FC1VN9oCh8qaBIZiQ%3D%3D"
-        )
 
-    def test_get_part_many_returned(self, monkeypatch):
-        def fake_post(*args, **kwargs):
-            return FakeResponse(
-                """{
+get_many_part_response = """{
   "Errors": [],
   "SearchResults": {
     "NumberOfResult": 2,
@@ -437,13 +393,3 @@ class TestMouserClient:
     ]
   }
 }"""
-            )
-
-        monkeypatch.setattr(requests, "post", fake_post)
-        mouser_part = MouserClient().get_part("863-BAT54SLT1G-2")
-        assert mouser_part.name == "BAT54SLT1G"
-        assert mouser_part.description == "Schottky Diodes & Rectifiers 30V 225mW Dual"
-        assert (
-            mouser_part.url_path
-            == "/ProductDetail/onsemi/BAT54SLT1G?qs=vLkC5FC1VN9oCh8qaBIZiQ%3D%3D"
-        )

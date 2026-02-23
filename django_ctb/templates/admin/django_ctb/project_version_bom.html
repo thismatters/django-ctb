@@ -16,6 +16,7 @@
     <th>Part</th>
     <th>Unit Cost</th>
     <th>Cost</th>
+    <th>Part</th>
   </tr>
     <tr>
       <td>0</td>
@@ -23,19 +24,30 @@
       <td>PCB</td>
       <td>{{ project_version.pcb_unit_cost|floatformat:4 }}</td>
       <td>{{ project_version.pcb_unit_cost|floatformat:4 }}</td>
+      <td>N/A</td>
     </tr>
   {% for project_part in project_version.project_parts.all|dictsort:"line_number" %}
     <tr>
       <td>{{ project_part.line_number }}</td>
-      <td>{{ project_part.quantity }}</td>
-      <td>{{ project_part.part }}</td>
-      <td>{{ project_part.part.unit_cost }}</td>
+      <td>{{ project_part.quantity }}{% if project_part.is_optional %}*{% endif %}</td>
+      {% if project_part.part != None %}
+        <td>{{ project_part.part }}</td>
+        <td>{{ project_part.part.unit_cost }}</td>
+      {% else %}
+        <td>Part not found!</td>
+        <td>-</td>
+      {% endif %}
       <td>{{ project_part.line_cost }}</td>
+      <td><a href="{% url 'admin:django_ctb_part_change' project_part.part.pk %}">part</a></td>
     </tr>
   {% endfor %}
   <tr>
     <td colspan="4">Total:</td>
     <td>{{ project_version.total_cost|floatformat:2 }}</td>
   </tr>
+  <tr>
+    <td colspan="5">(*) Marked parts are optional</td>
+  </tr>
 </table>
+
 {% endblock %}

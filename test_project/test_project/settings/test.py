@@ -1,4 +1,6 @@
-from .base import *
+from .base import *  # noqa: F403
+
+INSTALLED_APPS.remove("django_extensions")  # noqa: F405
 
 
 DRAMATIQ_BROKER = {
@@ -15,4 +17,4 @@ DRAMATIQ_BROKER = {
     ],
 }
 
-MOUSER_API_KEY = "FAKE"
+CTB_MOUSER_API_KEY = "FAKE"

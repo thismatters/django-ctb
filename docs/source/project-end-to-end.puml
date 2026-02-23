@@ -1,0 +1,110 @@
+@startuml
+
+participant "Vendor" as vendor
+actor "User" as user
+participant "Django CTB" as ctb
+participant "Git Server" as git
+
+user -> ctb: Ensure inventory exists
+user -> git: Create new repository
+user -> git: Commit BOM
+user -> ctb: Create new project
+user -> ctb: Create new project version
+loop Until project syncs
+    user -> ctb: Sync project version (action!)
+    activate ctb
+    ctb -> git: Get BOM
+    activate git
+    git --> ctb: BOM
+    deactivate git
+    ctb -> ctb: Parse BOM
+    loop For each BOM row
+        alt Part represented by BOM row exists
+            ctb -> ctb: Create project part from BOM row
+        else
+            ctb -> ctb: Create missing parts refs
+        end
+    end
+    alt No missing part refs created
+        ctb -> ctb: Mark project version as "synced"
+    end
+    deactivate ctb
+    alt Project version not "synced"
+        loop Until all missing part refs are addressed
+            alt Part specification is correct in BOM
+                user -> ctb: Create part for missing part ref
+            else A substitute part exists which will statisfy the design
+                user -> ctb: Update missing project part with a substitute part (and remove "Missing part description")
+            else
+                user -> user: Update BOM
+                user -> git: Commit BOM
+            end
+        end
+    end
+end
+user -> ctb: Create new project build referencing project version
+loop Until project build clears
+    user -> ctb: Update project parts to reflect "optional" status or make part substitutions
+    user -> ctb: Clear project build (action!)
+    activate ctb
+    loop For each project part associated with project version
+        alt Sufficient inventory of part to complete build
+            ctb -> ctb: Create reservation for part
+            ctb -> ctb: Deduct reservation quantity from inventory line
+        else
+            ctb -> ctb: Create build part shortage for part
+        end
+    end
+    alt No build part shortages created for project build
+        ctb -> ctb: Mark project build as "cleared"
+    end
+    deactivate ctb
+    alt Project build not "cleared"
+        user -> ctb: Create vendor orders from shortages (action!)
+        activate ctb
+        loop For each project build part shortage
+            alt Vendor part exists to match part
+                ctb -> ctb: Ensure order to vendor exists
+                ctb -> ctb: Ensure order line for part exists
+                ctb -> ctb: Increase order amount by shortage quantity
+            end
+        end
+        deactivate ctb
+        user -> ctb: Add lines and update quantities in vendor orders
+        loop [async] For each vendor order
+            user -> vendor: Place order
+            activate vendor
+            vendor -> vendor: Reticulate splines
+            vendor --> user: Ship order
+            deactivate vendor
+            user -> ctb: Fulfill vendor order (action!)
+            activate ctb
+            loop For each vendor order line
+                ctb -> ctb: Credit inventory line
+            end
+            ctb -> ctb: Mark vendor order as "fulfilled"
+            deactivate ctb
+        end
+    end
+end
+alt Nominal situation
+    user -> user: Build project (sweet action)
+    user -> ctb: Complete project build (action!)
+    activate ctb
+    loop For each project build reservation
+        ctb -> ctb: Mark reservation as "utilized"
+    end
+    ctb -> ctb: Mark project build as "complete"
+    deactivate ctb
+else Decided not to build
+    user -> ctb: Cancel project build (action!)
+    activate ctb
+    loop For each project build reservation
+        ctb -> ctb: Credit inventory line with reservation quantity
+        ctb -> ctb: Delete reservation
+    end
+    ctb -> ctb: Remove status from project build
+    deactivate ctb
+end
+
+@enduml

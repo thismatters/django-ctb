@@ -1,0 +1,70 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Project Build Bill of Materials{{ block.super }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="../">{{ project_build }}</a> &rsaquo;
+    Bill of Materials
+</div>
+{% endblock %}
+
+{% block content %}
+{% if project_build.shortfalls.all %}
+<div>
+  <h2>Shortfalls</h2>
+  <ul>
+    {% for shortfall in project_build.shortfalls.all %}
+      <li>{{ shortfall.quantity }}x {{ shortfall.part }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+<table>
+  <tr>
+    <th>Line</th>
+    <th>Refs</th>
+    <th>Part</th>
+    <th>Quantity</th>
+    <th>Line</th>
+    <th>Qty On Hand</th>
+    <th>Qty Projected</th>
+  </tr>
+    <tr>
+      <td>0</td>
+      <td>N/A</td>
+      <td>PCB</td>
+      <td>1</td>
+      <td></td>
+      <td></td>
+      <td></td>
+    </tr>
+  {% for part_reservation in project_build.part_reservations.all %}
+    <tr>
+      <td>{{ part_reservation.line_numbers }}</td>
+      <td>{{ part_reservation.footprints }}</td>
+      <td><a href="{% url 'admin:django_ctb_part_change' part_reservation.part.pk %}">{{ part_reservation.part }}</a></td>
+      {% for inventory_action in part_reservation.inventory_actions.all %}
+        {% if not forloop.first %}
+          </tr>
+            <td colspan="3"></td>
+          <tr>
+        {% endif %}
+        <td>{{ inventory_action.delta|cut:"-" }}</td>
+        <td><a href="{% url 'admin:django_ctb_inventoryline_change' inventory_action.inventory_line.pk %}">inv</a></td>
+        <td align="right">{{ inventory_action.inventory_line.quantity_on_hand }}</td>
+        <td align="right">{{ inventory_action.inventory_line.quantity }}</td>
+      {% endfor %}
+    </tr>
+  {% endfor %}
+  <tr>
+    <td colspan="5">(*) Marked parts are optional</td>
+  </tr>
+  <tr>
+    <td colspan="5"><b>Qty On Hand</b>: The number of parts in physical inventory <i>before</i> doing this build.</td>
+  </tr>
+  <tr>
+    <td colspan="5"><b>Qty Pending</b>: The number of parts in physical inventory <i>after</i> all pending and cleared builds have been built.</td>
+  </tr>
+</table>
+
+{% endblock %}
