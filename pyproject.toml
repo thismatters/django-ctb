@@ -1,6 +1,6 @@
 [project]
 name = "django-ctb"
-version = "0.1.0"
+version = "0.1.1rc1"
 requires-python = ">=3.12"
 description="Django app for managing small-scale electronics manufacturing inventory."
 authors = [

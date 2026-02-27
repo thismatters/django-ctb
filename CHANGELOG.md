@@ -3,6 +3,8 @@ Changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Added
+- Classes for predicting part shortages.
+- analytics methods for projecting which parts may need to be procured based on historic past usage, current demand, and inventory levels.
 ### Changed
 ### Removed
 ### Fixed
