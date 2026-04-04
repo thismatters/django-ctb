@@ -92,11 +92,12 @@ class PartSatisfactionManager:
         number of ``needed`` parts, and tracks the project part itself for
         association to the reservation (should it come to pass).
         """
-        logger.info(
-            "Adding project part: "
-            f"{project_part.quantity} * {self.project_build.quantity}"
-        )
         self.needed += project_part.quantity * self.project_build.quantity
+        logger.info(
+            ">> Adding "
+            f"({project_part.quantity} * {self.project_build.quantity} = {self.needed})"
+            f" {project_part.part}"
+        )
         self.project_parts.append(project_part)
 
     def _ensure_inventory_action(
@@ -183,7 +184,7 @@ class PartSatisfactionManager:
             )
             self.fulfilled += depletion
             logger.info(
-                f">>>> Debiting inventory line {inventory_line} {depletion} parts"
+                f">>>> Debiting inventory line pk:{inventory_line.pk} {depletion} parts"
             )
             if self.unfulfilled == 0:
                 logger.info(">>>> Reservation satisfied")
@@ -225,10 +226,13 @@ class PartSatisfactionManager:
         Confirms that enough stock is on hand to cover the needed amount of
         parts. Raises ``InsufficientInventory`` otherwise.
         """
-        logger.info(f">> Checking stock for {self.part}")
+        if self.unfulfilled == 0:
+            logger.info(">> No stock needed...")
+            return
+        logger.info(f">> Checking stock for {self.part} (need {self.needed} parts)")
         inventory_lines = self._get_inventory_lines_queryset()
         total_stock = sum(inventory_lines.values_list("quantity", flat=True))
-        if self.needed > total_stock:
+        if self.unfulfilled > total_stock:
             logger.info("!!!! Insufficient stock")
             self.fulfilled += total_stock
             shortage, _ = models.ProjectBuildPartShortage.objects.update_or_create(
@@ -294,6 +298,7 @@ class ProjectBuildService:
 
         # Gather project parts by part (parts may be used on more than one row)
         # Accumulate total quantity required for all rows
+        logger.info("Starting Project Part Consolidation")
         consolidated_project_parts: dict[int, PartSatisfactionManager] = {}
         for project_part in build.project_version.project_parts.all():
             if project_part.pk in excluded_project_part_pks:
@@ -339,10 +344,10 @@ class ProjectBuildService:
             logger.info("!! Lacking: ")
             for shortage in shortages:
                 _vendor_part = shortage.part.part_vendors.all().order_by("cost").first()
-                logger.info(shortage.part, shortage.quantity)
+                logger.info(f">> {shortage.part} short by {shortage.quantity}")
                 if _vendor_part:
                     logger.info(
-                        f">> {_vendor_part.vendor.name} {_vendor_part.item_number}"
+                        f">>>> {_vendor_part.vendor.name} {_vendor_part.item_number}"
                     )
             raise InsufficientInventory(shortages=shortages)
 

@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.urls]
-repository = "http://github.com/thismatters/django-ctb/"
+repository = "https://github.com/thismatters/django-ctb/"
 changelog = "https://github.com/thismatters/django-ctb/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]

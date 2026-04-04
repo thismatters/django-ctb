@@ -4,8 +4,11 @@ Changes to this project will be documented in this file.
 ## [Unreleased]
 ### Added
 ### Changed
+- Clean up clear to build logs
 ### Removed
 ### Fixed
+- Bug which prevented projects from clearing due to parts shortages despite existing reservations covering that part.
+- Bug in admin preventing Project Builds from displaying
 
 ## [0.1.0]
 ### DATABASE BREAKING CHANGES

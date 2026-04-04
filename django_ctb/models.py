@@ -655,6 +655,10 @@ class ProjectBuildPartReservation(models.Model):
             or "N/A"
         )
 
+    def __str__(self) -> str:  # pragma: no cover
+        is_utilized_prefix = "[x]" if self.utilized is not None else "[ ]"
+        return f"{is_utilized_prefix} {self.project_build}"
+
 
 class BillOfMaterialsRow(BaseModel):
     """

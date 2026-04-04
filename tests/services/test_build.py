@@ -315,6 +315,74 @@ class TestProjectBuildServiceClearToBuild:
         assert _line.quantity == 10
         assert project_build.cleared is not None
 
+    def test__clear_to_build__redo_edge_case(
+        self,
+        project_part,
+        project_build,
+        inventory_line_factory,
+        project_part_factory,
+        part_factory,
+    ):
+        # So let's suppose that we have a project of two parts.
+        # The first part we have _exactly_ the right amount of parts
+        # The second part we're short on (by one)
+        # We do a clear to build, we get shortage
+        # We buy another part
+        # We do a clear to build, everything should be good!
+        shortage_part = part_factory(name="fart", symbol="F")
+        shortage_project_part = project_part_factory(
+            part=shortage_part, line_number=2, quantity=3
+        )
+        _line = inventory_line_factory(part=project_part.part, quantity=11)
+        shortage_line = inventory_line_factory(
+            part=shortage_project_part.part, quantity=8
+        )
+        with pytest.raises(InsufficientInventory) as exc:
+            s.ProjectBuildService()._clear_to_build(project_build)
+        _shortage = exc.value.shortages[0]
+        assert _shortage.part == shortage_part
+        assert project_build.part_reservations.count() == 1
+        assert len(m.InventoryAction.objects.all()) == 1
+        action = m.InventoryAction.objects.all()[0]
+        assert action.inventory_line == _line
+        assert action.delta == -6
+        assert action.order_line is None
+        assert action.reservation.project_build == project_build
+        _line.refresh_from_db()
+        assert _line.quantity == 5
+        shortage = m.ProjectBuildPartShortage.objects.all()[0]
+        assert shortage == _shortage
+        assert shortage.quantity == 1
+        assert shortage.project_build == project_build
+        project_build.refresh_from_db()
+        assert project_build.cleared is None
+        # buy one more part
+        shortage_line.quantity = 9
+        shortage_line.save()
+
+        s.ProjectBuildService()._clear_to_build(project_build)
+        assert project_build.cleared is not None
+        assert len(m.InventoryAction.objects.all()) == 2
+        action = m.InventoryAction.objects.all()[0]
+        assert action.inventory_line == _line
+        assert action.delta == -6
+        assert action.order_line is None
+        assert action.reservation.project_build == project_build
+        action_1 = m.InventoryAction.objects.all()[1]
+        assert action_1.inventory_line == shortage_line
+        assert action_1.delta == -9
+        assert action_1.order_line is None
+        assert action_1.reservation.project_build == project_build
+        _line.refresh_from_db()
+        assert _line.quantity == 5
+        shortage_line.refresh_from_db()
+        assert shortage_line.quantity == 0
+
+        # we clean up
+        s.ProjectBuildPartReservationService().delete_reservations(
+            project_build.part_reservations.all()
+        )
+
     def test__clear_to_build__not(
         self, project_part, vendor_part, project_build, inventory_line_factory
     ):
@@ -518,7 +586,7 @@ class TestProjectBuildServiceClearToBuild:
         assert m.ProjectBuildPartShortage.objects.count() == 1
         assert m.ProjectBuildPartShortage.objects.all()[0].part == substitute_part
         project_build.excluded_project_parts.clear()
-        assert m.ProjectBuildPartShortage.objects.all().delete()
+        m.ProjectBuildPartShortage.objects.all().delete()
 
     def test__clear_to_build__equivalent_substitute_part(
         self, project_part, project_build, part, part_factory, inventory_line_factory
@@ -749,10 +817,12 @@ class TestProjectBuildServiceClearToBuild:
         assert (
             reservation_count + 1 == m.ProjectBuildPartReservation.objects.all().count()
         )
-        _reservations[-1].inventory_actions.all().count() == 1
-        _reservations[-1].inventory_actions.all()[0].delta == -9
-        _reservations[-1].inventory_actions.all()[0].inventory_line == line
-        _reservations[-1].inventory_actions.all()[0].inventory_line.quantity == 91
+        assert _reservations[-1].inventory_actions.all().count() == 1
+        assert _reservations[-1].inventory_actions.all()[0].delta == -9
+        assert _reservations[-1].inventory_actions.all()[0].inventory_line == line
+        assert (
+            _reservations[-1].inventory_actions.all()[0].inventory_line.quantity == 91
+        )
         _reservations[-1].inventory_actions.all().delete()
         for _, inventory_line, action, _ in factory_output:
             inventory_line.refresh_from_db()

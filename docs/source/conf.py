@@ -4,7 +4,8 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 import os
 import sys
-from importlib.metadata import PackageNotFoundError, version as _version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
