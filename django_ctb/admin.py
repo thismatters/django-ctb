@@ -149,7 +149,7 @@ class VendorPartAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.ImplicitProjectPart)
-class ImplicityProjectPartAdmin(admin.ModelAdmin):
+class ImplicitProjectPartAdmin(admin.ModelAdmin):
     list_display = ("part", "for_package", "quantity")
 
 
@@ -257,7 +257,7 @@ class ProjectPartAdmin(admin.ModelAdmin):
 
 
 class ProjectBuildPartShortageInline(admin.TabularInline):
-    fields = ("part", "quantity")
+    fields = ("part", "fallback_part", "quantity")
     model = models.ProjectBuildPartShortage
     extra = 0
 

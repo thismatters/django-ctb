@@ -6,6 +6,7 @@ import re
 from typing import TYPE_CHECKING
 
 from django.db import models
+from django.db.models.fields import related
 from django.utils import timezone
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
@@ -451,7 +452,7 @@ class ProjectPart(models.Model):
     substitute_part = models.ForeignKey(
         Part,
         on_delete=models.PROTECT,
-        related_name="substitute_project_part",
+        related_name="substitute_project_parts",
         null=True,
         blank=True,
         help_text=(
@@ -564,6 +565,15 @@ class ProjectBuildPartShortage(models.Model):
         ProjectBuild, on_delete=models.CASCADE, related_name="shortfalls"
     )
     created = models.DateTimeField(default=timezone.now)
+
+    fallback_part = models.ForeignKey(
+        Part,
+        on_delete=models.CASCADE,
+        related_name="shortage_fallback_parts",
+        null=True,
+        blank=True,
+        help_text="Part to be used to cover this shortage upon re-clearing",
+    )
 
 
 class ProjectBuildPartReservation(models.Model):

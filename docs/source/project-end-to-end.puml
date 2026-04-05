@@ -59,10 +59,14 @@ loop Until project build clears
         ctb -> ctb: Mark project build as "cleared"
     end
     deactivate ctb
-    alt Project build not "cleared"
+    alt Project build not "cleared", will use fallback parts which satsify design
+        loop For each project build part with appropriate fallback part
+            user -> ctb: Define fallback part for shortage
+        end
+    else Project build not "cleared", will place orders
         user -> ctb: Create vendor orders from shortages (action!)
         activate ctb
-        loop For each project build part shortage
+        loop For each project build part to order
             alt Vendor part exists to match part
                 ctb -> ctb: Ensure order to vendor exists
                 ctb -> ctb: Ensure order line for part exists

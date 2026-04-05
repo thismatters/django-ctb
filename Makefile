@@ -2,6 +2,8 @@ TEST_PATH = ""
 
 migrations:
 	cd test_project && uv run manage.py makemigrations
+migrate:
+	cd test_project && uv run manage.py migrate
 init:
 	cd test_project && uv run manage.py migrate # && uv run manage.py loaddata fixtures/test_data.json
 shell:

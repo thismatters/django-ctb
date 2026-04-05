@@ -51,7 +51,7 @@ class ProjectBuildPartReservationService:
 class PartSatisfactionManager:
     """
     Manages satisfaction of combined demand for parts in a project build.
-    This is a receptical in which to accumulate project parts which use a
+    This is a receptacle in which to accumulate project parts which use a
     common part, then to assess the stock of said part (or it's equivalents),
     finally creating reservations or shortages.
 
@@ -150,16 +150,36 @@ class PartSatisfactionManager:
             )
         return _equivalents
 
-    def _get_inventory_lines_queryset(self):
-        # determine equivalent parts
-        _equivalents = PartSatisfactionManager.find_equivalent_parts(
-            part=self.part,
-        )
+    def _get_inventory_lines(self) -> list[models.InventoryLine]:
+        def _get_inventory_lines_for_part(part) -> list[models.InventoryLine]:
+            # determine equivalent parts
+            _equivalents = PartSatisfactionManager.find_equivalent_parts(
+                part=part,
+            )
+            # get inventory lines for all equivalent parts
+            _inventory_lines = models.InventoryLine.objects.filter(
+                part__in=_equivalents, is_deprioritized=False
+            ).order_by("quantity")
+            return list(_inventory_lines)
 
-        # get inventory lines for all equivalent parts
-        inventory_lines = models.InventoryLine.objects.filter(
-            part__in=_equivalents, is_deprioritized=False
-        ).order_by("quantity")
+        # get inventory lines for actual part
+        inventory_lines = _get_inventory_lines_for_part(self.part)
+
+        # get fallback part from past shortage
+        shortage: models.ProjectBuildPartShortage | None = None
+        try:
+            shortage = models.ProjectBuildPartShortage.objects.get(
+                part=self.part,
+                project_build=self.project_build,
+                fallback_part__isnull=False,
+            )
+        except models.ProjectBuildPartShortage.DoesNotExist:
+            pass
+        if shortage is not None:
+            # get inventory lines for fallback part
+            inventory_lines.extend(
+                _get_inventory_lines_for_part(shortage.fallback_part)
+            )
         return inventory_lines
 
     def _debit_inventory_for_reservation(
@@ -175,7 +195,7 @@ class PartSatisfactionManager:
         """
         logger.info(">> Debiting inventory")
         # deduct from inventory lines until need is fulfilled
-        for inventory_line in self._get_inventory_lines_queryset():
+        for inventory_line in self._get_inventory_lines():
             depletion = min(self.unfulfilled, inventory_line.quantity)
             self._ensure_inventory_action(
                 inventory_line=inventory_line,
@@ -230,8 +250,8 @@ class PartSatisfactionManager:
             logger.info(">> No stock needed...")
             return
         logger.info(f">> Checking stock for {self.part} (need {self.needed} parts)")
-        inventory_lines = self._get_inventory_lines_queryset()
-        total_stock = sum(inventory_lines.values_list("quantity", flat=True))
+        inventory_lines = self._get_inventory_lines()
+        total_stock = sum([line.quantity for line in inventory_lines])
         if self.unfulfilled > total_stock:
             logger.info("!!!! Insufficient stock")
             self.fulfilled += total_stock

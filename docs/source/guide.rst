@@ -166,6 +166,8 @@ ProjectBuildPartShortage
 
 When a project build cannot be ``cleared`` due to a lack of parts in the inventory a part shortage will be created.
 
+A ``fallback_part`` can be defined for any part shortage, the part specified will be used to fill that shortage the next time the build is cleared.
+
 ProjectBuildPartReservation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

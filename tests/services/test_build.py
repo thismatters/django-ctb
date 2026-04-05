@@ -619,6 +619,44 @@ class TestProjectBuildServiceClearToBuild:
             project_build.part_reservations.all()
         )
 
+    def test__clear_to_build__fallback_part(
+        self, project_part, project_build, part, part_factory, inventory_line_factory
+    ):
+        """
+        :scenario: Clear To Build Process will utilize fallback parts for
+                   Project Builds to overcome shortage
+
+        | GIVEN a project uses a part with insufficient stock
+        | AND the project clear to build process has been run
+        | AND the project build part shortage has been updated to have a fallback part
+        | AND the fallback part has stock
+        | WHEN the project clear to build process is re-run
+        | THEN all the stock of the given part will be reserved
+        | AND the fallback part will be reserved to cover the remaining need
+        | AND subsequent runs of the project clear to build process will succeed
+        """
+        inventory_line_factory(part=part, quantity=4)
+        with pytest.raises(InsufficientInventory) as exc:
+            s.ProjectBuildService()._clear_to_build(project_build)
+        shortage = exc.value.shortages[0]
+        fallback_part = part_factory(name="fallback", symbol="F")
+        shortage.fallback_part = fallback_part
+        shortage.save()
+        _line = inventory_line_factory(part=fallback_part, quantity=10)
+        reservations = s.ProjectBuildService()._clear_to_build(project_build)
+        assert len(reservations) == 1
+        assert reservations[0].inventory_actions.count() == 2
+        action_1 = reservations[0].inventory_actions.all()[0]
+        assert action_1 is not None
+        assert action_1.inventory_line.part == part
+        assert action_1.delta == -4
+        action_2 = reservations[0].inventory_actions.all()[1]
+        assert action_2 is not None
+        assert action_2.inventory_line.part == fallback_part
+        assert action_2.delta == -2
+
+        s.ProjectBuildService()._clear_to_build(project_build)
+
     def test__clear_to_build__is_idempotent(
         self,
         part_factory,
