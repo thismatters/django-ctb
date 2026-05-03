@@ -120,14 +120,14 @@ class Part(models.Model):
         return f"{self.name} {self.symbol} {self.value} -- {self.package}"
 
     @property
-    def unit_cost(self):
+    def unit_cost(self) -> float:
         """
         Extrapolated cost for each individual part
         """
         part_vendor = self.part_vendors.all().order_by("cost").first()
         if part_vendor is not None:
-            return part_vendor.cost
-        return 0
+            return float(part_vendor.cost)
+        return float(0)
 
 
 class ImplicitProjectPart(models.Model):
@@ -398,7 +398,7 @@ class ProjectVersion(models.Model):
         """
         if self.pcb_cost is None:
             return 0.0
-        return self.pcb_cost / 3
+        return float(self.pcb_cost / 3)
 
     @property
     def total_cost(self) -> float:
@@ -472,15 +472,15 @@ class ProjectPart(models.Model):
         footprint_refs: RelatedManager["ProjectPartFootprintRef"]
 
     @property
-    def line_cost(self):
+    def line_cost(self) -> float:
         """
         Extrapolates the cost for the parts to satisfy this project part
         """
         if self.part is None:
-            return 0
+            return float(0)
         if self.part.unit_cost is None:
-            return 0
-        return self.part.unit_cost * self.quantity
+            return float(0)
+        return float(self.part.unit_cost * self.quantity)
 
     @property
     def footprints(self):
@@ -621,6 +621,7 @@ class ProjectBuildPartReservation(models.Model):
 
     created = models.DateTimeField(default=timezone.now)
     utilized = models.DateTimeField(null=True, blank=True)
+    order_key = models.IntegerField(default=0)
 
     if TYPE_CHECKING:
         inventory_actions: RelatedManager[InventoryAction]

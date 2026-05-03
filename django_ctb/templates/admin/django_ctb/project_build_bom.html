@@ -38,7 +38,7 @@
       <td></td>
       <td></td>
     </tr>
-  {% for part_reservation in project_build.part_reservations.all %}
+  {% for part_reservation in project_build.part_reservations.all|dictsort:"order_key" %}
     <tr>
       <td>{{ part_reservation.line_numbers }}</td>
       <td>{{ part_reservation.footprints }}</td>

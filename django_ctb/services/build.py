@@ -289,6 +289,7 @@ class PartSatisfactionManager:
             reservation = models.ProjectBuildPartReservation.objects.create(
                 project_build=self.project_build,
                 part=self.part,
+                order_key=min([part.line_number for part in self.project_parts]),
             )
         reservation.project_parts.set(self.project_parts)
 
@@ -364,7 +365,7 @@ class ProjectBuildService:
             logger.info("!! Lacking: ")
             for shortage in shortages:
                 _vendor_part = shortage.part.part_vendors.all().order_by("cost").first()
-                logger.info(f">> {shortage.part} short by {shortage.quantity}")
+                logger.info(f">> {shortage.part}, {shortage.quantity}")
                 if _vendor_part:
                     logger.info(
                         f">>>> {_vendor_part.vendor.name} {_vendor_part.item_number}"

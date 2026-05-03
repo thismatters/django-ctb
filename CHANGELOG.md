@@ -10,12 +10,14 @@ Changes to this project will be documented in this file.
 ## [0.1.1] -- UNRELEASED
 ### Added
 - Add `fallback_part` to `ProjectBuildPartShortage`; `fallback_part` will be used upon re-clearing a project to cover the shortage of the original part
+- Implicit ordering for BOM rows to match the original BOM
 ### Changed
 - Clean up clear to build logs
 ### Fixed
 - Bug which prevented projects from clearing due to parts shortages despite existing reservations covering that part.
 - Bug in admin preventing Project Builds from displaying
 - Build BOM displaying multiple inventory actions
+- Type issues on project version BOM
 
 ## [0.1.0]
 ### DATABASE BREAKING CHANGES
