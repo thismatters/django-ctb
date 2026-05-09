@@ -7,7 +7,7 @@ Changes to this project will be documented in this file.
 ### Removed
 ### Fixed
 
-## [0.1.1] -- UNRELEASED
+## [0.1.1] -- Fallback Parts
 ### Added
 - Add `fallback_part` to `ProjectBuildPartShortage`; `fallback_part` will be used upon re-clearing a project to cover the shortage of the original part
 - Implicit ordering for BOM rows to match the original BOM
