@@ -7,6 +7,18 @@ Changes to this project will be documented in this file.
 ### Removed
 ### Fixed
 
+## [0.1.1] -- Fallback Parts
+### Added
+- Add `fallback_part` to `ProjectBuildPartShortage`; `fallback_part` will be used upon re-clearing a project to cover the shortage of the original part
+- Implicit ordering for BOM rows to match the original BOM
+### Changed
+- Clean up clear to build logs
+### Fixed
+- Bug which prevented projects from clearing due to parts shortages despite existing reservations covering that part.
+- Bug in admin preventing Project Builds from displaying
+- Build BOM displaying multiple inventory actions
+- Type issues on project version BOM
+
 ## [0.1.0]
 ### DATABASE BREAKING CHANGES
 - `django-enumfield` was removed as a dependency in favor of the new `models.IntegerChoices` pattern. To affect this change the migrations for this project had to be re-initialized. **YOU WILL HAVE TO RESET YOUR DATABASE TO MIGRATE FROM 0.0.1 TO 0.0.2**; I'm pretty sure there are no users for this package at this point, so I'm not sweating it too much. If you are a user with data who wants to migrate I will provide support (within reason) to facilitate the migration without data loss. Please raise an issue on the board!

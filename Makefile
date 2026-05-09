@@ -2,6 +2,8 @@ TEST_PATH = ""
 
 migrations:
 	cd test_project && uv run manage.py makemigrations
+migrate:
+	cd test_project && uv run manage.py migrate
 init:
 	cd test_project && uv run manage.py migrate # && uv run manage.py loaddata fixtures/test_data.json
 shell:
@@ -11,9 +13,10 @@ run:
 run-worker:
 	cd test_project && uv run manage.py rundramatiq --reload
 lint:
-	black django_ctb
-	isort django_ctb
-	cd django_ctb && pflake8
+	uv run ruff check --fix .
+	uv run ruff format .
+typecheck:
+	uv run ty check
 test:
 	DJANGO_SETTINGS_MODULE=test_project.settings.test uv run pytest --cov=django_ctb --cov-report term-missing tests/$(TEST_PATH)
 uml-diagram:

@@ -1,6 +1,6 @@
 [project]
 name = "django-ctb"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.12"
 description="Django app for managing small-scale electronics manufacturing inventory."
 authors = [
@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.urls]
-repository = "http://github.com/thismatters/django-ctb/"
+repository = "https://github.com/thismatters/django-ctb/"
 changelog = "https://github.com/thismatters/django-ctb/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]

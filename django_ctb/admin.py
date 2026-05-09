@@ -149,7 +149,7 @@ class VendorPartAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.ImplicitProjectPart)
-class ImplicityProjectPartAdmin(admin.ModelAdmin):
+class ImplicitProjectPartAdmin(admin.ModelAdmin):
     list_display = ("part", "for_package", "quantity")
 
 
@@ -257,13 +257,13 @@ class ProjectPartAdmin(admin.ModelAdmin):
 
 
 class ProjectBuildPartShortageInline(admin.TabularInline):
-    fields = ("part", "quantity")
+    fields = ("part", "fallback_part", "quantity")
     model = models.ProjectBuildPartShortage
     extra = 0
 
 
 class ProjectBuildPartReservationInline(admin.TabularInline):
-    fields = ("inventory_action", "part", "utilized")
+    fields = ("part", "utilized")
     model = models.ProjectBuildPartReservation
     extra = 0
 
@@ -311,10 +311,10 @@ class ProjectBuildAdmin(ExtendibleModelAdminMixin, admin.ModelAdmin):
         )
 
     def get_form(
-        self, request, obj, change, **kwargs
+        self, request, obj, *args, **kwargs
     ):  # pragma: no cover  # type: ignore[invalid-method-override]
         self.obj = obj
-        return super().get_form(request, obj, change, **kwargs)
+        return super().get_form(request, obj, *args, **kwargs)
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):  # pragma: no cover
         if db_field.name == "excluded_project_parts" and self.obj is not None:

@@ -51,7 +51,7 @@ class ProjectBuildPartReservationService:
 class PartSatisfactionManager:
     """
     Manages satisfaction of combined demand for parts in a project build.
-    This is a receptical in which to accumulate project parts which use a
+    This is a receptacle in which to accumulate project parts which use a
     common part, then to assess the stock of said part (or it's equivalents),
     finally creating reservations or shortages.
 
@@ -92,11 +92,12 @@ class PartSatisfactionManager:
         number of ``needed`` parts, and tracks the project part itself for
         association to the reservation (should it come to pass).
         """
-        logger.info(
-            "Adding project part: "
-            f"{project_part.quantity} * {self.project_build.quantity}"
-        )
         self.needed += project_part.quantity * self.project_build.quantity
+        logger.info(
+            ">> Adding "
+            f"({project_part.quantity} * {self.project_build.quantity} = {self.needed})"
+            f" {project_part.part}"
+        )
         self.project_parts.append(project_part)
 
     def _ensure_inventory_action(
@@ -149,16 +150,36 @@ class PartSatisfactionManager:
             )
         return _equivalents
 
-    def _get_inventory_lines_queryset(self):
-        # determine equivalent parts
-        _equivalents = PartSatisfactionManager.find_equivalent_parts(
-            part=self.part,
-        )
+    def _get_inventory_lines(self) -> list[models.InventoryLine]:
+        def _get_inventory_lines_for_part(part) -> list[models.InventoryLine]:
+            # determine equivalent parts
+            _equivalents = PartSatisfactionManager.find_equivalent_parts(
+                part=part,
+            )
+            # get inventory lines for all equivalent parts
+            _inventory_lines = models.InventoryLine.objects.filter(
+                part__in=_equivalents, is_deprioritized=False
+            ).order_by("quantity")
+            return list(_inventory_lines)
 
-        # get inventory lines for all equivalent parts
-        inventory_lines = models.InventoryLine.objects.filter(
-            part__in=_equivalents, is_deprioritized=False
-        ).order_by("quantity")
+        # get inventory lines for actual part
+        inventory_lines = _get_inventory_lines_for_part(self.part)
+
+        # get fallback part from past shortage
+        shortage: models.ProjectBuildPartShortage | None = None
+        try:
+            shortage = models.ProjectBuildPartShortage.objects.get(
+                part=self.part,
+                project_build=self.project_build,
+                fallback_part__isnull=False,
+            )
+        except models.ProjectBuildPartShortage.DoesNotExist:
+            pass
+        if shortage is not None:
+            # get inventory lines for fallback part
+            inventory_lines.extend(
+                _get_inventory_lines_for_part(shortage.fallback_part)
+            )
         return inventory_lines
 
     def _debit_inventory_for_reservation(
@@ -174,7 +195,7 @@ class PartSatisfactionManager:
         """
         logger.info(">> Debiting inventory")
         # deduct from inventory lines until need is fulfilled
-        for inventory_line in self._get_inventory_lines_queryset():
+        for inventory_line in self._get_inventory_lines():
             depletion = min(self.unfulfilled, inventory_line.quantity)
             self._ensure_inventory_action(
                 inventory_line=inventory_line,
@@ -183,7 +204,7 @@ class PartSatisfactionManager:
             )
             self.fulfilled += depletion
             logger.info(
-                f">>>> Debiting inventory line {inventory_line} {depletion} parts"
+                f">>>> Debiting inventory line pk:{inventory_line.pk} {depletion} parts"
             )
             if self.unfulfilled == 0:
                 logger.info(">>>> Reservation satisfied")
@@ -225,10 +246,13 @@ class PartSatisfactionManager:
         Confirms that enough stock is on hand to cover the needed amount of
         parts. Raises ``InsufficientInventory`` otherwise.
         """
-        logger.info(f">> Checking stock for {self.part}")
-        inventory_lines = self._get_inventory_lines_queryset()
-        total_stock = sum(inventory_lines.values_list("quantity", flat=True))
-        if self.needed > total_stock:
+        if self.unfulfilled == 0:
+            logger.info(">> No stock needed...")
+            return
+        logger.info(f">> Checking stock for {self.part} (need {self.needed} parts)")
+        inventory_lines = self._get_inventory_lines()
+        total_stock = sum([line.quantity for line in inventory_lines])
+        if self.unfulfilled > total_stock:
             logger.info("!!!! Insufficient stock")
             self.fulfilled += total_stock
             shortage, _ = models.ProjectBuildPartShortage.objects.update_or_create(
@@ -265,6 +289,7 @@ class PartSatisfactionManager:
             reservation = models.ProjectBuildPartReservation.objects.create(
                 project_build=self.project_build,
                 part=self.part,
+                order_key=min([part.line_number for part in self.project_parts]),
             )
         reservation.project_parts.set(self.project_parts)
 
@@ -294,6 +319,7 @@ class ProjectBuildService:
 
         # Gather project parts by part (parts may be used on more than one row)
         # Accumulate total quantity required for all rows
+        logger.info("Starting Project Part Consolidation")
         consolidated_project_parts: dict[int, PartSatisfactionManager] = {}
         for project_part in build.project_version.project_parts.all():
             if project_part.pk in excluded_project_part_pks:
@@ -339,10 +365,10 @@ class ProjectBuildService:
             logger.info("!! Lacking: ")
             for shortage in shortages:
                 _vendor_part = shortage.part.part_vendors.all().order_by("cost").first()
-                logger.info(shortage.part, shortage.quantity)
+                logger.info(f">> {shortage.part}, {shortage.quantity}")
                 if _vendor_part:
                     logger.info(
-                        f">> {_vendor_part.vendor.name} {_vendor_part.item_number}"
+                        f">>>> {_vendor_part.vendor.name} {_vendor_part.item_number}"
                     )
             raise InsufficientInventory(shortages=shortages)
 

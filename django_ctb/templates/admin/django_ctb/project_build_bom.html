@@ -38,17 +38,17 @@
       <td></td>
       <td></td>
     </tr>
-  {% for part_reservation in project_build.part_reservations.all %}
+  {% for part_reservation in project_build.part_reservations.all|dictsort:"order_key" %}
     <tr>
       <td>{{ part_reservation.line_numbers }}</td>
       <td>{{ part_reservation.footprints }}</td>
-      <td><a href="{% url 'admin:django_ctb_part_change' part_reservation.part.pk %}">{{ part_reservation.part }}</a></td>
       {% for inventory_action in part_reservation.inventory_actions.all %}
         {% if not forloop.first %}
           </tr>
-            <td colspan="3"></td>
           <tr>
+            <td colspan="2"></td>
         {% endif %}
+        <td><a href="{% url 'admin:django_ctb_part_change' inventory_action.inventory_line.part.pk %}">{{ inventory_action.inventory_line.part }}</a></td>
         <td>{{ inventory_action.delta|cut:"-" }}</td>
         <td><a href="{% url 'admin:django_ctb_inventoryline_change' inventory_action.inventory_line.pk %}">inv</a></td>
         <td align="right">{{ inventory_action.inventory_line.quantity_on_hand }}</td>
@@ -57,13 +57,13 @@
     </tr>
   {% endfor %}
   <tr>
-    <td colspan="5">(*) Marked parts are optional</td>
+    <td colspan="7">(*) Marked parts are optional</td>
   </tr>
   <tr>
-    <td colspan="5"><b>Qty On Hand</b>: The number of parts in physical inventory <i>before</i> doing this build.</td>
+    <td colspan="7"><b>Qty On Hand</b>: The number of parts in physical inventory <i>before</i> doing this build.</td>
   </tr>
   <tr>
-    <td colspan="5"><b>Qty Pending</b>: The number of parts in physical inventory <i>after</i> all pending and cleared builds have been built.</td>
+    <td colspan="7"><b>Qty Pending</b>: The number of parts in physical inventory <i>after</i> all pending and cleared builds have been built.</td>
   </tr>
 </table>
 

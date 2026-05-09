@@ -6,6 +6,7 @@ import re
 from typing import TYPE_CHECKING
 
 from django.db import models
+from django.db.models.fields import related
 from django.utils import timezone
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
@@ -119,14 +120,14 @@ class Part(models.Model):
         return f"{self.name} {self.symbol} {self.value} -- {self.package}"
 
     @property
-    def unit_cost(self):
+    def unit_cost(self) -> float:
         """
         Extrapolated cost for each individual part
         """
         part_vendor = self.part_vendors.all().order_by("cost").first()
         if part_vendor is not None:
-            return part_vendor.cost
-        return 0
+            return float(part_vendor.cost or 0)
+        return float(0)
 
 
 class ImplicitProjectPart(models.Model):
@@ -396,8 +397,8 @@ class ProjectVersion(models.Model):
         batch size at oshpark.com).
         """
         if self.pcb_cost is None:
-            return 0.0
-        return self.pcb_cost / 3
+            return float(0.0)
+        return float(self.pcb_cost / 3)
 
     @property
     def total_cost(self) -> float:
@@ -451,7 +452,7 @@ class ProjectPart(models.Model):
     substitute_part = models.ForeignKey(
         Part,
         on_delete=models.PROTECT,
-        related_name="substitute_project_part",
+        related_name="substitute_project_parts",
         null=True,
         blank=True,
         help_text=(
@@ -471,15 +472,13 @@ class ProjectPart(models.Model):
         footprint_refs: RelatedManager["ProjectPartFootprintRef"]
 
     @property
-    def line_cost(self):
+    def line_cost(self) -> float:
         """
         Extrapolates the cost for the parts to satisfy this project part
         """
         if self.part is None:
-            return 0
-        if self.part.unit_cost is None:
-            return 0
-        return self.part.unit_cost * self.quantity
+            return float(0)
+        return float(self.part.unit_cost * self.quantity)
 
     @property
     def footprints(self):
@@ -565,6 +564,15 @@ class ProjectBuildPartShortage(models.Model):
     )
     created = models.DateTimeField(default=timezone.now)
 
+    fallback_part = models.ForeignKey(
+        Part,
+        on_delete=models.CASCADE,
+        related_name="shortage_fallback_parts",
+        null=True,
+        blank=True,
+        help_text="Part to be used to cover this shortage upon re-clearing",
+    )
+
 
 class ProjectBuildPartReservation(models.Model):
     """
@@ -611,6 +619,7 @@ class ProjectBuildPartReservation(models.Model):
 
     created = models.DateTimeField(default=timezone.now)
     utilized = models.DateTimeField(null=True, blank=True)
+    order_key = models.IntegerField(default=0)
 
     if TYPE_CHECKING:
         inventory_actions: RelatedManager[InventoryAction]
@@ -654,6 +663,10 @@ class ProjectBuildPartReservation(models.Model):
             )
             or "N/A"
         )
+
+    def __str__(self) -> str:  # pragma: no cover
+        is_utilized_prefix = "[x]" if self.utilized is not None else "[ ]"
+        return f"{is_utilized_prefix} {self.project_build}"
 
 
 class BillOfMaterialsRow(BaseModel):
