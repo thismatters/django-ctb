@@ -126,7 +126,7 @@ class Part(models.Model):
         """
         part_vendor = self.part_vendors.all().order_by("cost").first()
         if part_vendor is not None:
-            return float(part_vendor.cost)
+            return float(part_vendor.cost or 0)
         return float(0)
 
 
@@ -397,7 +397,7 @@ class ProjectVersion(models.Model):
         batch size at oshpark.com).
         """
         if self.pcb_cost is None:
-            return 0.0
+            return float(0.0)
         return float(self.pcb_cost / 3)
 
     @property
@@ -477,8 +477,6 @@ class ProjectPart(models.Model):
         Extrapolates the cost for the parts to satisfy this project part
         """
         if self.part is None:
-            return float(0)
-        if self.part.unit_cost is None:
             return float(0)
         return float(self.part.unit_cost * self.quantity)
 

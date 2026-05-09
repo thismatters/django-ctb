@@ -12,7 +12,7 @@ class TestPartModel:
         assert part.unit_cost == 0
 
     def test_unit_cost(self, vendor_part):
-        assert vendor_part.part.unit_cost == Decimal("0.0100")
+        assert vendor_part.part.unit_cost == pytest.approx(0.01)
 
 
 class TestProjectPartModel:
