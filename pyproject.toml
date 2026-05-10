@@ -33,6 +33,7 @@ dependencies = [
     "django-appconf>=1.2.0",
     "requests>=2.32.3",
     "pydantic>=2.12.5",
+    "djangorestframework>=3.17.1",
 ]
 
 [project.urls]
@@ -56,6 +57,7 @@ dev = [
     "pygraphviz>=1.11",
     "django-stubs>=5.2.9",
     "ty>=0.0.18",
+    "factory-boy>=3.3.3",
 ]
 doc = [
     "sphinx>=9.1.0",

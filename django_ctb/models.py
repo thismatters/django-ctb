@@ -208,28 +208,6 @@ class VendorOrder(models.Model):
         lines: RelatedManager["VendorOrderLine"]
 
 
-class VendorOrderLine(models.Model):
-    """
-    Represents lines for individual parts in orders.
-    """
-
-    vendor_order = models.ForeignKey(
-        VendorOrder, on_delete=models.CASCADE, related_name="lines"
-    )
-    vendor_part = models.ForeignKey(
-        VendorPart, on_delete=models.PROTECT, related_name="lines"
-    )
-    quantity = models.PositiveIntegerField()
-    cost = models.DecimalField(decimal_places=4, max_digits=8, help_text="per unit")
-    for_inventory = models.ForeignKey("Inventory", on_delete=models.PROTECT)
-
-    def __str__(self):  # pragma: no cover
-        return (
-            f"{self.vendor_order.vendor} {self.vendor_order.order_number} "
-            f"x{self.quantity}"
-        )
-
-
 class Inventory(models.Model):
     """
     Container for complete stock of parts available for usage in project
@@ -243,6 +221,28 @@ class Inventory(models.Model):
 
     def __str__(self):  # pragma: no cover
         return self.name
+
+
+class VendorOrderLine(models.Model):
+    """
+    Represents lines for individual parts in orders.
+    """
+
+    vendor_order = models.ForeignKey(
+        VendorOrder, on_delete=models.CASCADE, related_name="lines"
+    )
+    vendor_part = models.ForeignKey(
+        VendorPart, on_delete=models.PROTECT, related_name="lines"
+    )
+    quantity = models.PositiveIntegerField()
+    cost = models.DecimalField(decimal_places=4, max_digits=8, help_text="per unit")
+    for_inventory = models.ForeignKey(Inventory, on_delete=models.PROTECT)
+
+    def __str__(self):  # pragma: no cover
+        return (
+            f"{self.vendor_order.vendor} {self.vendor_order.order_number} "
+            f"x{self.quantity}"
+        )
 
 
 class InventoryLine(models.Model):

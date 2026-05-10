@@ -5,6 +5,7 @@ import pytest
 from django.utils import timezone
 
 from django_ctb import models as m
+from . import factories as fac
 
 
 @pytest.fixture
@@ -27,7 +28,7 @@ def vendor_factory(db):
     lines = []
 
     def _factory(*, name="test vendor", base_url="https://testvend.or"):
-        line = m.Vendor.objects.create(name=name, base_url=base_url)
+        line = fac.VendorFactory(name=name, base_url=base_url)
         lines.append(line)
         return line
 
@@ -47,14 +48,14 @@ def vendor_mouser(vendor_factory):
 
 @pytest.fixture
 def footprint(db):
-    footprint = m.Footprint.objects.create(name="Test Footprint")
+    footprint = fac.FootprintFactory(name="Test Footprint")
     yield footprint
     footprint.delete()
 
 
 @pytest.fixture
 def package(db, footprint):
-    package = m.Package.objects.create(
+    package = fac.PackageFactory(
         technology=m.Package.Technology.THROUGH_HOLE,
         name="Test Package",
     )
@@ -68,9 +69,7 @@ def part_factory(db, package):
     parts = []
 
     def _factory(*, name, symbol, **kwargs):
-        part = m.Part.objects.create(
-            name=name, symbol=symbol, package=package, **kwargs
-        )
+        part = fac.PartFactory(name=name, symbol=symbol, package=package, **kwargs)
         parts.append(part)
         return part
 
@@ -93,7 +92,7 @@ def implicit_project_part_factory(db, part_factory, package):
     implicit_project_parts = []
 
     def _factory(*, part, quantity=1, for_package=package):
-        implicit_project_part = m.ImplicitProjectPart.objects.create(
+        implicit_project_part = fac.ImplicitProjectPartFactory(
             for_package=for_package,
             part=part,
             quantity=quantity,
@@ -118,7 +117,7 @@ def vendor_part_factory(db, part_factory, vendor):
         volume=12,
         url_path="/best-part",
     ):
-        part = m.VendorPart.objects.create(
+        part = fac.VendorPartFactory(
             vendor=vendor,
             part=part,
             item_number=item_number,
@@ -145,7 +144,7 @@ def vendor_part_mouser(db, part, vendor_mouser, vendor_part_factory):
 
 @pytest.fixture
 def inventory(db):
-    inventory = m.Inventory.objects.create(name="Test inventory")
+    inventory = fac.InventoryFactory(name="Test inventory")
     yield inventory
     inventory.delete()
 
@@ -155,7 +154,7 @@ def inventory_line_factory(db, inventory, part):
     lines = []
 
     def _factory(*, part=part, quantity, is_deprioritized=False):
-        line = m.InventoryLine.objects.create(
+        line = fac.InventoryLineFactory(
             inventory=inventory,
             part=part,
             quantity=quantity,
@@ -175,7 +174,7 @@ def inventory_line(inventory_line_factory):
 
 @pytest.fixture
 def project(db):
-    project = m.Project.objects.create(
+    project = fac.ProjectFactory(
         name="Test Project",
         git_server=m.Project.GitServer.GITHUB,
         git_user="fake",
@@ -190,7 +189,7 @@ def project_version_factory(db, project):
     lines = []
 
     def _factory(*, project=project):
-        line = m.ProjectVersion.objects.create(
+        line = fac.ProjectVersionFactory(
             project=project,
             revision=0,
             commit_ref="v0",
@@ -222,7 +221,7 @@ def project_part_factory(db, part_factory, part, project_version):
         is_implicit=False,
         is_optional=False,
     ):
-        part = m.ProjectPart.objects.create(
+        part = fac.ProjectPartFactory(
             part=part,
             project_version=project_version,
             line_number=line_number,
@@ -256,7 +255,7 @@ def project_part_footprint_ref_factory(db, project_part):
     lines = []
 
     def _factory(*, project_part=project_part, footprint_ref="F0"):
-        line = m.ProjectPartFootprintRef.objects.create(
+        line = fac.ProjectPartFootprintRefFactory(
             project_part=project_part, footprint_ref=footprint_ref
         )
         lines.append(line)
@@ -273,7 +272,7 @@ def project_build_factory(db, project_version, project_part_factory):
     def _factory(
         *, project_version=project_version, quantity=3, cleared=None, completed=None
     ):
-        line = m.ProjectBuild.objects.create(
+        line = fac.ProjectBuildFactory(
             project_version=project_version,
             quantity=quantity,
             cleared=cleared,
@@ -297,7 +296,7 @@ def project_build(db, project_build_factory, project_part):
 
 @pytest.fixture
 def vendor_order(db, vendor):
-    order = m.VendorOrder.objects.create(vendor=vendor, order_number="test")
+    order = fac.VendorOrderFactory(vendor=vendor, order_number="test")
     yield order
     order.delete()
 
@@ -307,7 +306,7 @@ def vendor_order_line_factory(db, vendor_order, inventory, vendor_part):
     lines = []
 
     def _factory(*, vendor_part=vendor_part, quantity=10, cost=1):
-        line = m.VendorOrderLine.objects.create(
+        line = fac.VendorOrderLineFactory(
             vendor_order=vendor_order,
             for_inventory=inventory,
             quantity=quantity,
@@ -338,7 +337,7 @@ def inventory_action_factory(
     def _factory(*, inventory_line=inventory_line, delta, days_ago=None, **kwargs):
         if days_ago is not None:
             kwargs["created"] = timezone.now() - datetime.timedelta(days=days_ago)
-        line = m.InventoryAction.objects.create(
+        line = fac.InventoryActionFactory(
             inventory_line=inventory_line,
             delta=delta,
             **kwargs,
@@ -355,7 +354,7 @@ def project_build_part_shortage_factory(db):
     lines = []
 
     def _factory(*, part, quantity, project_build):
-        line = m.ProjectBuildPartShortage.objects.create(
+        line = fac.ProjectBuildPartShortageFactory(
             part=part,
             quantity=quantity,
             project_build=project_build,
@@ -372,7 +371,7 @@ def project_build_part_reservation_factory(db, project_build, part):
     lines = []
 
     def _factory(*, project_build=project_build, part=part, **kwargs):
-        line = m.ProjectBuildPartReservation.objects.create(
+        line = fac.ProjectBuildPartReservationFactory(
             project_build=project_build, part=part, **kwargs
         )
         lines.append(line)
@@ -393,7 +392,7 @@ def project_build_part_reservation(project_build_part_reservation_factory):
 
 # @pytest.fixture
 # def project_part_footprint_ref(db, project_part):
-#     footprint_ref = m.ProjectPartFootprintRef.objects.create(
+#     footprint_ref = fac.ProjectPartFootprintRefFactory(
 #         project_part=project_part,
 #         footprint_ref="F2",
 #     )

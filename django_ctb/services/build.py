@@ -334,7 +334,7 @@ class ProjectBuildService:
     def _clear_to_build(self, build) -> list[models.ProjectBuildPartReservation]:
         """
         Reserves sufficient stock of parts to complete a project, or---barring
-        availability---reserves stock of parts which are pletiful enough to
+        availability---reserves stock of parts which are plentiful enough to
         complete the project build and creates shortages for those unfortunate
         parts which have low stocks (then raises an ``InsufficientInventory``
         exception).

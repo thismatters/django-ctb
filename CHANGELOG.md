@@ -3,7 +3,11 @@ Changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Added
+- `factory_boy` as dev dependency
+- `djangorestframework` as a dependency
+- `...Factory` for each model in `tests/factories.py`
 ### Changed
+- factory test fixtures to use `...Factory` factories
 ### Removed
 ### Fixed
 
