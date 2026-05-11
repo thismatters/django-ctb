@@ -15,6 +15,7 @@ Changes to this project will be documented in this file.
 ### Changed
 - factory test fixtures to use `...Factory` factories
 - service code to respect `owner` for owned resources
+- [proj] to use `just` (from `make`) for project management commands
 ### Removed
 ### Fixed
 
