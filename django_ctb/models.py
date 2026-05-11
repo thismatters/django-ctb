@@ -5,6 +5,7 @@ Data models (and database models) for stock and projects.
 import re
 from typing import TYPE_CHECKING
 
+from django.conf import settings
 from django.db import models
 from django.db.models.fields import related
 from django.utils import timezone
@@ -130,16 +131,6 @@ class Part(models.Model):
         return float(0)
 
 
-class ImplicitProjectPart(models.Model):
-    """Certain parts do not appear on the BOM, but must be used for the final
-    build. These are represented here. e.g. LED bezel, potentiometer knob, even
-    the PCB could fit in this category?"""
-
-    part = models.ForeignKey(Part, on_delete=models.PROTECT)
-    for_package = models.ForeignKey(Package, on_delete=models.PROTECT)
-    quantity = models.SmallIntegerField(default=1)
-
-
 class VendorPart(models.Model):
     """
     The representation of a part as sold by a vendor. Pricing, item numbers,
@@ -190,11 +181,37 @@ class VendorPart(models.Model):
         ordering = ("vendor__name", "item_number")
 
 
+class Owner(models.Model):
+    """
+    The entity which owns the Inventories, VendorOrders, Projects, and more.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        related_name="django_ctb_owner",
+        on_delete=models.SET_NULL,
+    )
+
+
+class ImplicitProjectPart(models.Model):
+    """Certain parts do not appear on the BOM, but must be used for the final
+    build. These are represented here. e.g. LED bezel, potentiometer knob, even
+    the PCB could fit in this category?"""
+
+    owner = models.ForeignKey(Owner, on_delete=models.CASCADE)
+    part = models.ForeignKey(Part, on_delete=models.PROTECT)
+    for_package = models.ForeignKey(Package, on_delete=models.PROTECT)
+    quantity = models.SmallIntegerField(default=1)
+
+
 class VendorOrder(models.Model):
     """
     Represents orders of parts from a vendor.
     """
 
+    owner = models.ForeignKey(Owner, on_delete=models.PROTECT)
     vendor = models.ForeignKey(Vendor, on_delete=models.PROTECT, related_name="orders")
     order_number = models.CharField(max_length=128, null=True, blank=True)
     created = models.DateTimeField(default=timezone.now)
@@ -214,6 +231,7 @@ class Inventory(models.Model):
     builds.
     """
 
+    owner = models.ForeignKey(Owner, on_delete=models.PROTECT)
     name = models.CharField(max_length=64)
 
     class Meta:
@@ -341,6 +359,7 @@ class Project(models.Model):
         UNKNOWN = 0
         GITHUB = 1
 
+    owner = models.ForeignKey(Owner, on_delete=models.PROTECT)
     name = models.CharField(max_length=64)
 
     git_server = models.PositiveSmallIntegerField(

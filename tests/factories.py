@@ -43,14 +43,6 @@ class PartFactory(factory.django.DjangoModelFactory):
         self.vendors.add(*extracted)  # type: ignore
 
 
-class ImplicitProjectPartFactory(factory.django.DjangoModelFactory):
-    class Meta:  # type: ignore
-        model = "django_ctb.ImplicitProjectPart"
-
-    part = factory.SubFactory(PartFactory)  # type: ignore
-    for_package = factory.SubFactory(PackageFactory)  # type: ignore
-
-
 class VendorPartFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.VendorPart"
@@ -60,6 +52,19 @@ class VendorPartFactory(factory.django.DjangoModelFactory):
     cost = factory.Faker(  # type: ignore
         "pydecimal", min_value=0.01, max_value=9999, left_digits=4, right_digits=4
     )
+
+
+class OwnerFactory(factory.django.DjangoModelFactory):
+    class Meta:  # type: ignore
+        model = "django_ctb.Owner"
+
+
+class ImplicitProjectPartFactory(factory.django.DjangoModelFactory):
+    class Meta:  # type: ignore
+        model = "django_ctb.ImplicitProjectPart"
+
+    part = factory.SubFactory(PartFactory)  # type: ignore
+    for_package = factory.SubFactory(PackageFactory)  # type: ignore
 
 
 class VendorOrderFactory(factory.django.DjangoModelFactory):

@@ -235,6 +235,47 @@ class TestPartSatisfactionManager:
         )
         assert len(other_way) == 17
 
+    def test_part_satisfaction_respects_owner(
+        self,
+        part,
+        inventory_line_factory,
+        project_part,
+        project_build,
+        inventory_factory,
+        owner_factory,
+    ):
+        """
+        :scenario: Part Satisfaction only considers Inventories owned by Project
+                   owner
+
+        | GIVEN a part exists
+        | AND the given part has an inventory line with sufficient stock with separate owner
+        | WHEN the part satisfaction ensure reservation process is run targeting
+          that part
+        | THEN the inventory line is not used for fulfillment
+        | AND an InsufficientInventory exception will be raised with the
+          unfilfilled need
+        | AND no reservation will be created
+        | AND no inventory action will be created
+        """
+        initial_inventory_count = m.InventoryAction.objects.all().count()
+        initial_reservation_count = m.ProjectBuildPartReservation.objects.all().count()
+        separate_owner = owner_factory()
+        separate_inventory = inventory_factory(owner=separate_owner)
+        _line = inventory_line_factory(
+            part=part, quantity=100, inventory=separate_inventory
+        )
+        satisfaction = s.PartSatisfactionManager(part=part, project_build=project_build)
+        satisfaction.add_project_part(project_part=project_part)
+        with pytest.raises(InsufficientInventory) as exc:
+            satisfaction.ensure_reservation()
+        assert exc.value.shortages[0].quantity == 6
+        assert initial_inventory_count == m.InventoryAction.objects.all().count()
+        assert (
+            initial_reservation_count
+            == m.ProjectBuildPartReservation.objects.all().count()
+        )
+
 
 class TestProjectBuildServiceClearToBuild:
     """

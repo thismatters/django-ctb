@@ -50,7 +50,6 @@ CTB_MOUSER_API_KEY = "put-your-real-mouser-api-key-here-yall"
 #### Changed
 - [proj] to use `just` (from `make`) for project management commands
 - drf integration
-- associate inventory/projects to user
 - Incorporate analytics methods as actions... maybe persist top recommendations?
   - Test robustly
 

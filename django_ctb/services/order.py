@@ -96,6 +96,7 @@ class VendorOrderService:
     ):
         # get (or create) open vendor order for necessary vendor
         vendor_order, _ = models.VendorOrder.objects.get_or_create(
+            owner=inventory.owner,
             vendor=vendor_part.vendor,
             placed__isnull=True,
         )
@@ -128,8 +129,13 @@ class VendorOrderService:
             )
         except models.ProjectBuild.DoesNotExist:
             return
-        inventory = models.Inventory.objects.first()
+        inventory = models.Inventory.objects.filter(
+            owner=build.project_version.project.owner
+        ).first()
         if inventory is None:
+            logger.warning(
+                f"No inventory for owner {build.project_version.project.owner}"
+            )
             return
         # analyze shortfalls for vendors and item numbers
         _shortfalls = self._accumulate_shortfalls(build)
@@ -138,6 +144,7 @@ class VendorOrderService:
                 selected_vendor_part = self._select_vendor_part(_shortfall.part)
             except MissingVendorPart:
                 # nothing to do for this part
+                logger.info(f"No vendor part for {_shortfall.part}")
                 continue
             self._populate_vendor_order(
                 vendor_part=selected_vendor_part,

@@ -88,23 +88,6 @@ def part_queryset(db, part):
 
 
 @pytest.fixture
-def implicit_project_part_factory(db, part_factory, package):
-    implicit_project_parts = []
-
-    def _factory(*, part, quantity=1, for_package=package):
-        implicit_project_part = fac.ImplicitProjectPartFactory(
-            for_package=for_package,
-            part=part,
-            quantity=quantity,
-        )
-        implicit_project_parts.append(implicit_project_part)
-        return implicit_project_part
-
-    yield _factory
-    [ipp.delete() for ipp in implicit_project_parts]
-
-
-@pytest.fixture
 def vendor_part_factory(db, part_factory, vendor):
     parts = []
 
@@ -143,17 +126,69 @@ def vendor_part_mouser(db, part, vendor_mouser, vendor_part_factory):
 
 
 @pytest.fixture
-def inventory(db):
-    inventory = fac.InventoryFactory(name="Test inventory")
-    yield inventory
-    inventory.delete()
+def owner_factory(db):
+    lines = []
+
+    def _factory(**kwargs):
+        line = fac.OwnerFactory(**kwargs)
+        lines.append(line)
+        return line
+
+    yield _factory
+    for line in lines:
+        try:
+            line.delete()
+        except m.Owner.DoesNotExist:
+            pass
+
+
+@pytest.fixture
+def owner(owner_factory):
+    return owner_factory()
+
+
+@pytest.fixture
+def implicit_project_part_factory(db, part_factory, package, owner):
+    implicit_project_parts = []
+
+    def _factory(*, part, owner=owner, quantity=1, for_package=package):
+        implicit_project_part = fac.ImplicitProjectPartFactory(
+            for_package=for_package, part=part, quantity=quantity, owner=owner
+        )
+        implicit_project_parts.append(implicit_project_part)
+        return implicit_project_part
+
+    yield _factory
+    [ipp.delete() for ipp in implicit_project_parts]
+
+
+@pytest.fixture
+def inventory_factory(db, owner):
+    lines = []
+
+    def _factory(*, owner=owner, name="Test inventory", **kwargs):
+        line = fac.InventoryFactory(owner=owner, name=name, **kwargs)
+        lines.append(line)
+        return line
+
+    yield _factory
+    for line in lines:
+        try:
+            line.delete()
+        except m.Inventory.DoesNotExist:
+            pass
+
+
+@pytest.fixture
+def inventory(db, inventory_factory):
+    return inventory_factory()
 
 
 @pytest.fixture
 def inventory_line_factory(db, inventory, part):
     lines = []
 
-    def _factory(*, part=part, quantity, is_deprioritized=False):
+    def _factory(*, inventory=inventory, part=part, quantity, is_deprioritized=False):
         line = fac.InventoryLineFactory(
             inventory=inventory,
             part=part,
@@ -173,15 +208,40 @@ def inventory_line(inventory_line_factory):
 
 
 @pytest.fixture
-def project(db):
-    project = fac.ProjectFactory(
+def project_factory(db, owner):
+    lines = []
+
+    def _factory(
+        *,
+        owner=owner,
         name="Test Project",
         git_server=m.Project.GitServer.GITHUB,
         git_user="fake",
         git_repo="fake",
-    )
-    yield project
-    project.delete()
+        **kwargs,
+    ):
+        line = fac.ProjectFactory(
+            owner=owner,
+            name=name,
+            git_server=git_server,
+            git_user=git_user,
+            git_repo=git_repo,
+            **kwargs,
+        )
+        lines.append(line)
+        return line
+
+    yield _factory
+    for line in lines:
+        try:
+            line.delete()
+        except m.Project.DoesNotExist:
+            pass
+
+
+@pytest.fixture
+def project(db, project_factory):
+    return project_factory()
 
 
 @pytest.fixture
@@ -295,10 +355,27 @@ def project_build(db, project_build_factory, project_part):
 
 
 @pytest.fixture
-def vendor_order(db, vendor):
-    order = fac.VendorOrderFactory(vendor=vendor, order_number="test")
-    yield order
-    order.delete()
+def vendor_order_factory(db, owner, vendor):
+    lines = []
+
+    def _factory(*, owner=owner, vendor=vendor, order_number="test", **kwargs):
+        line = fac.VendorOrderFactory(
+            owner=owner, vendor=vendor, order_number=order_number, **kwargs
+        )
+        lines.append(line)
+        return line
+
+    yield _factory
+    for line in lines:
+        try:
+            line.delete()
+        except m.VendorOrder.DoesNotExist:
+            pass
+
+
+@pytest.fixture
+def vendor_order(db, vendor_order_factory):
+    return vendor_order_factory()
 
 
 @pytest.fixture

@@ -148,6 +148,11 @@ class VendorPartAdmin(admin.ModelAdmin):
     _populate.short_description = "Populate fields (Mouser)"  # type: ignore[unresolve-attribute]
 
 
+@admin.register(models.Owner)
+class OwnerAdmin(admin.ModelAdmin):
+    list_display = ("id", "user")
+
+
 @admin.register(models.ImplicitProjectPart)
 class ImplicitProjectPartAdmin(admin.ModelAdmin):
     list_display = ("part", "for_package", "quantity")

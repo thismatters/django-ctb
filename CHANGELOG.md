@@ -6,8 +6,15 @@ Changes to this project will be documented in this file.
 - `factory_boy` as dev dependency
 - `djangorestframework` as a dependency
 - `...Factory` for each model in `tests/factories.py`
+- `Owner` model
+- `ForeignKey` to `Owner` model in
+  - `ImplicitProjectPart`
+  - `VendorOrder`
+  - `Inventory`
+  - `Project`
 ### Changed
 - factory test fixtures to use `...Factory` factories
+- service code to respect `owner` for owned resources
 ### Removed
 ### Fixed
 

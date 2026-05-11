@@ -287,6 +287,45 @@ class TestVendorOrderService:
         vendor_order.lines.all()[0].delete()
         vendor_order.delete()
 
+    def test__populate_vendor_order__respects_owner(
+        self,
+        vendor_part,
+        inventory,
+        vendor,
+        inventory_factory,
+        owner,
+        owner_factory,
+        vendor_order_factory,
+    ):
+        """
+        :scenario: Populate Vendor Order Process will create a new Vendor Order
+                   when no open Vendor Order exists.
+
+        | GIVEN a vendor part exists for a vendor
+        | AND there is an owner
+        | AND a vendor order exists for the given vendor with a separate owner
+        | WHEN _populate_vendor_order is called for the vendor part providing a quantity
+        | THEN a vendor order will be created with the given vendor and the given owner
+        | AND a vendor order line will be created for the vendor part
+        | AND the provided quantity will be represented in the order line
+        """
+        assert m.VendorOrder.objects.count() == 0
+        separate_owner = owner_factory()
+        existing_order_with_separate_order = vendor_order_factory(owner=separate_owner)
+        assert m.VendorOrder.objects.count() == 1
+        s.VendorOrderService()._populate_vendor_order(
+            vendor_part=vendor_part, quantity=22, inventory=inventory
+        )
+        assert m.VendorOrder.objects.count() == 2
+        vendor_order = m.VendorOrder.objects.all()[1]
+        assert vendor_order.owner == owner
+        assert vendor_order.vendor == vendor_part.vendor
+        assert vendor_order.lines.count() == 1
+        assert vendor_order.lines.all()[0].vendor_part == vendor_part
+        assert vendor_order.lines.all()[0].quantity == 22
+        vendor_order.lines.all()[0].delete()
+        vendor_order.delete()
+
     def test_generate_vendor_orders(
         self,
         project_build,
@@ -358,3 +397,42 @@ class TestVendorOrderService:
         assert m.VendorOrder.objects.count() == 0
         s.VendorOrderService().generate_vendor_orders(project_build.pk)
         assert m.VendorOrder.objects.count() == 0
+
+    def test_generate_vendor_orders__respects_owner(
+        self,
+        part,
+        vendor_part,
+        project_factory,
+        project_version_factory,
+        project_build_factory,
+        owner,
+        owner_factory,
+        inventory,
+        inventory_factory,
+        project_build_part_shortage_factory,
+    ):
+        """
+        :scenario: Generate Vendor Orders Process will utilize the same Owner
+                   for creating Vendor Orders as the Project Build Owner
+
+        | GIVEN a project build exists with a separate owner
+        | AND shortages exist for that project build
+        | AND two owners have their own inventories
+        | WHEN generate_vendor_orders is called for the project build
+        | THEN a vendor order owned by the separate owner will be created
+        """
+
+        separate_owner = owner_factory()
+        separate_inventory = inventory_factory(owner=separate_owner)
+        project = project_factory(owner=separate_owner)
+        project_version = project_version_factory(project=project)
+        project_build = project_build_factory(project_version=project_version)
+        shortage = project_build_part_shortage_factory(
+            part=part, quantity=10, project_build=project_build
+        )
+        assert m.VendorOrder.objects.count() == 0
+        s.VendorOrderService().generate_vendor_orders(project_build.pk)
+        assert m.VendorOrder.objects.count() == 1
+        order = m.VendorOrder.objects.all()[0]
+        assert order.owner == separate_owner
+        m.VendorOrder.objects.all().delete()

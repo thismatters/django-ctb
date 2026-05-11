@@ -87,7 +87,8 @@ class ProjectVersionBomService:
             )
             return
         implicit_project_parts = models.ImplicitProjectPart.objects.filter(
-            for_package=project_part.part.package
+            owner=project_part.project_version.project.owner,
+            for_package=project_part.part.package,
         )
         project_part_pks = []
         for implicit_project_part in implicit_project_parts:

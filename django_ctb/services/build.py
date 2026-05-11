@@ -158,7 +158,9 @@ class PartSatisfactionManager:
             )
             # get inventory lines for all equivalent parts
             _inventory_lines = models.InventoryLine.objects.filter(
-                part__in=_equivalents, is_deprioritized=False
+                inventory__owner=self.project_build.project_version.project.owner,
+                part__in=_equivalents,
+                is_deprioritized=False,
             ).order_by("quantity")
             return list(_inventory_lines)
 
