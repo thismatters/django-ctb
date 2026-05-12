@@ -14,6 +14,8 @@ Changes to this project will be documented in this file.
   - `Project`
 - Autogen API docs to test suite
 - REST API to cover all resources:
+  - `VendorOrder`
+  - `Inventory`
   - `Project`
 ### Changed
 - factory test fixtures to use `...Factory` factories

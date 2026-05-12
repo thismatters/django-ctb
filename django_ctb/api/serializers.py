@@ -1,6 +1,5 @@
 # noqa: D101
 import logging
-from enum import Enum
 
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
@@ -27,7 +26,7 @@ class PackageSerializer(serializers.ModelSerializer):
 class VendorSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Vendor
-        fields = "__all__"
+        fields = ("id", "name", "base_url")
 
 
 class SimplePartSerializer(serializers.ModelSerializer):
@@ -101,22 +100,66 @@ class ImplicitProjectPartSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+# simple rule: don't make nested serializations for reverse related resources
+#   e.g. vendor order lines point _to_ the vendor order, don't attempt
+#   to serialize lines on the order.
 class VendorOrderSerializer(serializers.ModelSerializer):
+    vendor_id = serializers.PrimaryKeyRelatedField(
+        source="vendor",
+        queryset=models.Vendor.objects.all(),
+    )
+    # lines = VendorOrderLineSerializer(many=True)
+
     class Meta:
         model = models.VendorOrder
-        fields = "__all__"
+        fields = (
+            "id",
+            "vendor_id",
+            "order_number",
+            "created",
+            "placed",
+            "fulfilled",
+            # "lines",
+        )
 
 
 class InventorySerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Inventory
-        fields = "__all__"
+        fields = ("id", "name")
 
 
 class VendorOrderLineSerializer(serializers.ModelSerializer):
+    vendor_part_id = serializers.PrimaryKeyRelatedField(
+        source="vendor_part", queryset=models.VendorPart.objects.all()
+    )
+    for_inventory_id = serializers.PrimaryKeyRelatedField(
+        source="for_inventory", queryset=models.Inventory.objects.all()
+    )
+    # tempting to allow setting by item number, but there could be two vendors
+    #  with the same item number...
+    vendor_part_number = serializers.SlugRelatedField(
+        source="vendor_part", slug_field="item_number", read_only=True
+    )
+    part_name = serializers.SlugRelatedField(
+        source="vendor_part.part", slug_field="name", read_only=True
+    )
+    part_description = serializers.SlugRelatedField(
+        source="vendor_part.part", slug_field="description", read_only=True
+    )
+    part_value = serializers.SlugRelatedField(
+        source="vendor_part.part", slug_field="value", read_only=True
+    )
+
     class Meta:
         model = models.VendorOrderLine
-        fields = "__all__"
+        fields = (
+            "id",
+            "vendor_part_id",
+            "vendor_part_number",
+            "quantity",
+            "for_inventory_id",
+        )
 
 
 class InventoryLineSerializer(serializers.ModelSerializer):

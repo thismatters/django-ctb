@@ -1,3 +1,4 @@
+from django_ctb import models
 import factory
 import factory.fuzzy
 
@@ -22,6 +23,8 @@ class PackageFactory(factory.django.DjangoModelFactory):
 class VendorFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.Vendor"
+
+    name = factory.Sequence(lambda x: f"vendor {x}")
 
 
 class PartFactory(factory.django.DjangoModelFactory):
@@ -70,12 +73,15 @@ class VendorOrderFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.VendorOrder"
 
-    vendor = factory.SubFactory(VendorFactory)  # type: ignore
+    # vendor = factory.SubFactory(VendorFactory)  # type: ignore
+    vendor = factory.Iterator(models.Vendor.objects.all())
 
 
 class InventoryFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.Inventory"
+
+    name = factory.Sequence(lambda x: f"inventory {x}")
 
 
 class VendorOrderLineFactory(factory.django.DjangoModelFactory):
@@ -104,6 +110,12 @@ class InventoryLineFactory(factory.django.DjangoModelFactory):
 class ProjectFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.Project"
+
+    # name = factory.Faker("text", max_nb_chars=20)  # type: ignore
+    name = factory.Sequence(lambda x: f"project {x}")
+    git_server = 1
+    git_user = factory.Sequence(lambda x: f"user-{x}")
+    git_repo = factory.Sequence(lambda x: f"repo-{x}")
 
 
 class ProjectVersionFactory(factory.django.DjangoModelFactory):
