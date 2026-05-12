@@ -296,6 +296,7 @@ class TestVendorOrderService:
         owner,
         owner_factory,
         vendor_order_factory,
+        user_factory,
     ):
         """
         :scenario: Populate Vendor Order Process will create a new Vendor Order
@@ -310,7 +311,8 @@ class TestVendorOrderService:
         | AND the provided quantity will be represented in the order line
         """
         assert m.VendorOrder.objects.count() == 0
-        separate_owner = owner_factory()
+        separate_user = user_factory("bob", email="bob@test.test", password="password")
+        separate_owner = owner_factory(user=separate_user)
         existing_order_with_separate_order = vendor_order_factory(owner=separate_owner)
         assert m.VendorOrder.objects.count() == 1
         s.VendorOrderService()._populate_vendor_order(
@@ -410,6 +412,7 @@ class TestVendorOrderService:
         inventory,
         inventory_factory,
         project_build_part_shortage_factory,
+        user_factory,
     ):
         """
         :scenario: Generate Vendor Orders Process will utilize the same Owner
@@ -421,8 +424,8 @@ class TestVendorOrderService:
         | WHEN generate_vendor_orders is called for the project build
         | THEN a vendor order owned by the separate owner will be created
         """
-
-        separate_owner = owner_factory()
+        separate_user = user_factory("bob", email="bob@test.test", password="password")
+        separate_owner = owner_factory(user=separate_user)
         separate_inventory = inventory_factory(owner=separate_owner)
         project = project_factory(owner=separate_owner)
         project_version = project_version_factory(project=project)

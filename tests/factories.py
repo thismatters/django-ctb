@@ -1,8 +1,6 @@
 import factory
 import factory.fuzzy
 
-from django_ctb import models as m
-
 
 class FootprintFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
@@ -57,6 +55,7 @@ class VendorPartFactory(factory.django.DjangoModelFactory):
 class OwnerFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.Owner"
+        django_get_or_create = ("user",)
 
 
 class ImplicitProjectPartFactory(factory.django.DjangoModelFactory):

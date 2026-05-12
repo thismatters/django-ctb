@@ -243,6 +243,7 @@ class TestPartSatisfactionManager:
         project_build,
         inventory_factory,
         owner_factory,
+        user_factory,
     ):
         """
         :scenario: Part Satisfaction only considers Inventories owned by Project
@@ -260,7 +261,8 @@ class TestPartSatisfactionManager:
         """
         initial_inventory_count = m.InventoryAction.objects.all().count()
         initial_reservation_count = m.ProjectBuildPartReservation.objects.all().count()
-        separate_owner = owner_factory()
+        separate_user = user_factory("bob", email="bob@test.test", password="password")
+        separate_owner = owner_factory(user=separate_user)
         separate_inventory = inventory_factory(owner=separate_owner)
         _line = inventory_line_factory(
             part=part, quantity=100, inventory=separate_inventory

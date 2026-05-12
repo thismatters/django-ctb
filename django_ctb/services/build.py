@@ -366,7 +366,7 @@ class ProjectBuildService:
             logger.info("!! Not clear to build !!")
             logger.info("!! Lacking: ")
             for shortage in shortages:
-                _vendor_part = shortage.part.part_vendors.all().order_by("cost").first()
+                _vendor_part = shortage.part.vendor_parts.all().order_by("cost").first()
                 logger.info(f">> {shortage.part}, {shortage.quantity}")
                 if _vendor_part:
                     logger.info(

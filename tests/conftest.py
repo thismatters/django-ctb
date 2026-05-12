@@ -3,9 +3,35 @@ import datetime
 import dramatiq
 import pytest
 from django.utils import timezone
-
+from django.contrib.auth import get_user_model
 from django_ctb import models as m
+from rest_framework.test import APIClient
+
 from . import factories as fac
+
+
+@pytest.fixture
+def user_factory(db):
+    lines = []
+
+    def _factory(username="username", *, email="test@test.test", password="password"):
+        line = get_user_model().objects.create_user(
+            username=username, email=email, password=password
+        )
+        lines.append(line)
+        return line
+
+    yield _factory
+    for line in lines:
+        try:
+            line.delete()
+        except m.Owner.DoesNotExist:
+            pass
+
+
+@pytest.fixture
+def user(user_factory):
+    return user_factory()
 
 
 @pytest.fixture
@@ -126,11 +152,11 @@ def vendor_part_mouser(db, part, vendor_mouser, vendor_part_factory):
 
 
 @pytest.fixture
-def owner_factory(db):
+def owner_factory(db, user, user_factory):
     lines = []
 
-    def _factory(**kwargs):
-        line = fac.OwnerFactory(**kwargs)
+    def _factory(user=user):
+        line = fac.OwnerFactory(user=user)
         lines.append(line)
         return line
 

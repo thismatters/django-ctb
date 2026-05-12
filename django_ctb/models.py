@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.db import models
-from django.db.models.fields import related
 from django.utils import timezone
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
@@ -114,7 +113,7 @@ class Part(models.Model):
 
     if TYPE_CHECKING:
         equivalents: RelatedManager["Part"]
-        part_vendors: RelatedManager["VendorPart"]
+        vendor_parts: RelatedManager["VendorPart"]
         inventory_lines: RelatedManager["InventoryLine"]
 
     def __str__(self):  # pragma: no cover
@@ -125,7 +124,7 @@ class Part(models.Model):
         """
         Extrapolated cost for each individual part
         """
-        part_vendor = self.part_vendors.all().order_by("cost").first()
+        part_vendor = self.vendor_parts.all().order_by("cost").first()
         if part_vendor is not None:
             return float(part_vendor.cost or 0)
         return float(0)
@@ -141,7 +140,7 @@ class VendorPart(models.Model):
         Vendor, related_name="vendor_parts", on_delete=models.PROTECT
     )
     part = models.ForeignKey(
-        Part, related_name="part_vendors", on_delete=models.CASCADE
+        Part, related_name="vendor_parts", on_delete=models.CASCADE
     )
     item_number = models.CharField(
         max_length=64, help_text="how the vendor identifies the part"
@@ -290,7 +289,7 @@ class InventoryLine(models.Model):
         inventory line (comma separated).
         """
         _item_numbers = []
-        for vendor_part in self.part.part_vendors.all():
+        for vendor_part in self.part.vendor_parts.all():
             _item_numbers.append(vendor_part.item_number)
         return ", ".join(_item_numbers)
 

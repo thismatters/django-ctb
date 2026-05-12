@@ -91,6 +91,7 @@ class TestProjectVersionBomServiceSync:
         project_part_factory,
         implicit_project_part_factory,
         owner_factory,
+        user_factory,
     ):
         """
         :scenario: Implicit Project Parts with separate owners will not result
@@ -106,7 +107,8 @@ class TestProjectVersionBomServiceSync:
         project_part = project_part_factory(
             project_version=project_version, part=part, line_number=69
         )
-        separate_owner = owner_factory()
+        separate_user = user_factory("bob", email="bob@test.test", password="password")
+        separate_owner = owner_factory(user=separate_user)
         implicit_project_part_factory(
             for_package=part.package,
             part=implicit_part,
