@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django_extensions",
     "rest_framework",
+    "drf_spectacular",
     "django_dramatiq",
     "django_ctb",
     "test_project",
@@ -144,5 +145,16 @@ DRAMATIQ_BROKER = {
     ],
 }
 
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Django Clear to Build API",
+    "DESCRIPTION": "Django app for managing small-scale electronics manufacturing inventory.",
+    "VERSION": "1",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
 
 CTB_MOUSER_API_KEY = os.environ.get("MOUSER_API_KEY", "FAKE")

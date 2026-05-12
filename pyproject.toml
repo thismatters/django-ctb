@@ -58,6 +58,7 @@ dev = [
     "django-stubs>=5.2.9",
     "ty>=0.0.18",
     "factory-boy>=3.3.3",
+    "drf-spectacular>=0.29.0",
 ]
 doc = [
     "sphinx>=9.1.0",
