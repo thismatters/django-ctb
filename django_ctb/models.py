@@ -162,7 +162,7 @@ class VendorPart(models.Model):
     )
     lot_cost = models.GeneratedField(
         expression=models.F("cost") * models.F("volume"),
-        output_field=models.DecimalField(decimal_places=4, max_digits=8),
+        output_field=models.DecimalField(decimal_places=4, max_digits=12),
         db_persist=False,
     )
 

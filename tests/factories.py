@@ -7,31 +7,30 @@ class FootprintFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.Footprint"
 
+    name = factory.Sequence(lambda x: f"footprint {x}")  # type: ignore
+
 
 class PackageFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.Package"
 
-    @factory.post_generation  # type: ignore
-    def footprints(self, create, extracted, **kwargs):
-        if not create or not extracted:
-            return
-
-        self.footprints.add(*extracted)  # type: ignore
+    name = factory.Sequence(lambda x: f"package {x}")  # type: ignore
 
 
 class VendorFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.Vendor"
 
-    name = factory.Sequence(lambda x: f"vendor {x}")
+    base_url = factory.Sequence(lambda x: f"http://vendor{x}.com")  # type: ignore
+    name = factory.Sequence(lambda x: f"vendor {x}")  # type: ignore
 
 
 class PartFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.Part"
 
-    package = factory.SubFactory(PackageFactory)  # type: ignore
+    package = factory.Iterator(models.Package.objects.all())  # type: ignore
+    name = factory.Sequence(lambda x: f"part {x}")  # type: ignore
 
     # maybe not yet...
     # equivalent_to = factory.SubFactory(PartFactory)  # type: ignore
@@ -48,11 +47,13 @@ class VendorPartFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.VendorPart"
 
-    vendor = factory.SubFactory(VendorFactory)  # type: ignore
-    part = factory.SubFactory(PartFactory)  # type: ignore
+    vendor = factory.Iterator(models.Vendor.objects.all())  # type: ignore
+    part = factory.Iterator(models.Part.objects.all())  # type: ignore
+    item_number = factory.Sequence(lambda x: f"item-{x}")
     cost = factory.Faker(  # type: ignore
         "pydecimal", min_value=0.01, max_value=9999, left_digits=4, right_digits=4
     )
+    volume = 42
 
 
 class OwnerFactory(factory.django.DjangoModelFactory):
@@ -65,8 +66,8 @@ class ImplicitProjectPartFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.ImplicitProjectPart"
 
-    part = factory.SubFactory(PartFactory)  # type: ignore
-    for_package = factory.SubFactory(PackageFactory)  # type: ignore
+    part = factory.Iterator(models.Part.objects.all())  # type: ignore
+    for_package = factory.Iterator(models.Package.objects.all())  # type: ignore
 
 
 class VendorOrderFactory(factory.django.DjangoModelFactory):
@@ -74,23 +75,23 @@ class VendorOrderFactory(factory.django.DjangoModelFactory):
         model = "django_ctb.VendorOrder"
 
     # vendor = factory.SubFactory(VendorFactory)  # type: ignore
-    vendor = factory.Iterator(models.Vendor.objects.all())
+    vendor = factory.Iterator(models.Vendor.objects.all())  # type: ignore
 
 
 class InventoryFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.Inventory"
 
-    name = factory.Sequence(lambda x: f"inventory {x}")
+    name = factory.Sequence(lambda x: f"inventory {x}")  # type: ignore
 
 
 class VendorOrderLineFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.VendorOrderLine"
 
-    vendor_order = factory.SubFactory(VendorOrderFactory)  # type: ignore
-    vendor_part = factory.SubFactory(VendorPartFactory)  # type: ignore
-    for_inventory = factory.SubFactory(InventoryFactory)  # type: ignore
+    vendor_order = factory.Iterator(models.VendorOrder.objects.all())  # type: ignore
+    vendor_part = factory.Iterator(models.VendorPart.objects.all())  # type: ignore
+    for_inventory = factory.Iterator(models.Inventory.objects.all())  # type: ignore
 
     # quantity = factory.fuzzy.FuzzyInteger(1, 1000)
     quantity = factory.Faker("random_int", min=1, max=1000)  # type: ignore
@@ -103,8 +104,8 @@ class InventoryLineFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.InventoryLine"
 
-    inventory = factory.SubFactory(InventoryFactory)  # type: ignore
-    part = factory.SubFactory(PartFactory)  # type: ignore
+    part = factory.Iterator(models.Part.objects.all())  # type: ignore
+    inventory = factory.Iterator(models.Inventory.objects.all())  # type: ignore
 
 
 class ProjectFactory(factory.django.DjangoModelFactory):
@@ -112,10 +113,10 @@ class ProjectFactory(factory.django.DjangoModelFactory):
         model = "django_ctb.Project"
 
     # name = factory.Faker("text", max_nb_chars=20)  # type: ignore
-    name = factory.Sequence(lambda x: f"project {x}")
+    name = factory.Sequence(lambda x: f"project {x}")  # type: ignore
     git_server = 1
-    git_user = factory.Sequence(lambda x: f"user-{x}")
-    git_repo = factory.Sequence(lambda x: f"repo-{x}")
+    git_user = factory.Sequence(lambda x: f"user-{x}")  # type: ignore
+    git_repo = factory.Sequence(lambda x: f"repo-{x}")  # type: ignore
 
 
 class ProjectVersionFactory(factory.django.DjangoModelFactory):

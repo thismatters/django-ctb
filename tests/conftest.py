@@ -174,10 +174,10 @@ def owner(owner_factory):
 
 
 @pytest.fixture
-def implicit_project_part_factory(db, part_factory, package, owner):
+def implicit_project_part_factory(db, part_factory, part, package, owner):
     implicit_project_parts = []
 
-    def _factory(*, part, owner=owner, quantity=1, for_package=package):
+    def _factory(*, part=part, owner=owner, quantity=1, for_package=package):
         implicit_project_part = fac.ImplicitProjectPartFactory(
             for_package=for_package, part=part, quantity=quantity, owner=owner
         )
@@ -186,6 +186,11 @@ def implicit_project_part_factory(db, part_factory, package, owner):
 
     yield _factory
     [ipp.delete() for ipp in implicit_project_parts]
+
+
+@pytest.fixture
+def implicit_project_part(implicit_project_part_factory):
+    return implicit_project_part_factory()
 
 
 @pytest.fixture

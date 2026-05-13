@@ -12,7 +12,22 @@ logger = logging.getLogger(__name__)
 class FootprintSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Footprint
-        fields = "__all__"
+        fields = ("id", "name")
+
+    def run_validation(self, data):
+        _id = data.pop("id", None)
+        validated = super().run_validation(data)
+        # if an ID is given, ensure that it matches an existing footprint!
+        if _id is not None:
+            if not models.Footprint.objects.filter(id=_id).exists():
+                raise serializers.ValidationError(f"Unknown footprint with id {_id}")
+            validated["id"] = _id
+        return validated
+
+    def to_internal_value(self, data):
+        # This simplification keeps `id` in `data` (so that we can look up
+        #   the instance later)
+        return data
 
 
 class PackageSerializer(serializers.ModelSerializer):
@@ -21,6 +36,40 @@ class PackageSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Package
         fields = ("id", "name", "technology", "footprints")
+
+    def _get_footprint_instances(self, footprints):
+        footprint_instances = []
+        for footprint in footprints:
+            # the id for this has already been validated
+            footprint_id = footprint.pop("id", None)
+            footprint_instance = None
+            if footprint_id is not None:
+                footprint_instance = models.Footprint.objects.get(id=footprint_id)
+            if footprint:  # may be empty after that pop
+                if footprint_instance:
+                    _serializer = FootprintSerializer(
+                        instance=footprint_instance, data=footprint, partial=True
+                    )
+                else:
+                    _serializer = FootprintSerializer(data=footprint)
+                _serializer.is_valid(raise_exception=True)
+                footprint_instance = _serializer.save()
+            footprint_instances.append(footprint_instance)
+        return footprint_instances
+
+    def create(self, validated_data):
+        footprints = validated_data.pop("footprints", [])
+        instance = super().create(validated_data)
+        footprint_instances = self._get_footprint_instances(footprints=footprints)
+        instance.footprints.set(footprint_instances)
+        return instance
+
+    def update(self, instance, validated_data):
+        footprints = validated_data.pop("footprints", [])
+        instance = super().update(instance, validated_data)
+        footprint_instances = self._get_footprint_instances(footprints=footprints)
+        instance.footprints.set(footprint_instances)
+        return instance
 
 
 class VendorSerializer(serializers.ModelSerializer):
@@ -54,9 +103,17 @@ class SimpleVendorPartSerializer(serializers.ModelSerializer):
 
 
 class PartSerializer(serializers.ModelSerializer):
-    package = PackageSerializer()
-    equivalent_to = SimplePartSerializer()
-    vendor_parts = SimpleVendorPartSerializer(many=True)
+    package_id = serializers.PrimaryKeyRelatedField(
+        source="package", queryset=models.Package.objects.all()
+    )
+    equivalent_to_id = serializers.PrimaryKeyRelatedField(
+        source="equivalent_to", queryset=models.Part.objects.all(), allow_null=True
+    )
+    vendor_parts = SimpleVendorPartSerializer(
+        many=True,
+        read_only=True,
+        help_text="Read only. Manage vendor parts using the dedicated resource endpoint",
+    )
 
     class Meta:
         model = models.Part
@@ -69,19 +126,33 @@ class PartSerializer(serializers.ModelSerializer):
             "loading_limit",
             "unit",
             "symbol",
-            "package",
+            "package_id",
             "vendor_parts",
-            "equivalent_to",
+            "equivalent_to_id",
         )
 
 
-# TODO: decide whether this is necessary. I don't think there is a reason
-# to be messing with these via API just yet. Maybe someday, but for now this
-# can be handled via admin/shell
-# class VendorPartSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = models.VendorPart
-#         fields = "__all__"
+class VendorPartSerializer(serializers.ModelSerializer):
+    vendor_id = serializers.PrimaryKeyRelatedField(
+        source="vendor",
+        queryset=models.Vendor.objects.all(),
+    )
+    part_id = serializers.PrimaryKeyRelatedField(
+        source="part",
+        queryset=models.Part.objects.all(),
+    )
+
+    class Meta:
+        model = models.VendorPart
+        fields = (
+            "id",
+            "vendor_id",
+            "part_id",
+            "item_number",
+            "cost",
+            "volume",
+            "url_path",
+        )
 
 
 class OwnerSerializer(serializers.ModelSerializer):
@@ -95,9 +166,18 @@ class OwnerSerializer(serializers.ModelSerializer):
 
 
 class ImplicitProjectPartSerializer(serializers.ModelSerializer):
+    part_id = serializers.PrimaryKeyRelatedField(
+        source="part",
+        queryset=models.Part.objects.all(),
+    )
+    for_package_id = serializers.PrimaryKeyRelatedField(
+        source="for_package",
+        queryset=models.Package.objects.all(),
+    )
+
     class Meta:
         model = models.ImplicitProjectPart
-        fields = "__all__"
+        fields = ("id", "part_id", "for_package_id", "quantity")
 
 
 # simple rule: don't make nested serializations for reverse related resources
@@ -130,25 +210,14 @@ class InventorySerializer(serializers.ModelSerializer):
 
 
 class VendorOrderLineSerializer(serializers.ModelSerializer):
+    vendor_order_id = serializers.PrimaryKeyRelatedField(
+        source="vendor_order", queryset=models.VendorOrder.objects.all()
+    )
     vendor_part_id = serializers.PrimaryKeyRelatedField(
         source="vendor_part", queryset=models.VendorPart.objects.all()
     )
     for_inventory_id = serializers.PrimaryKeyRelatedField(
         source="for_inventory", queryset=models.Inventory.objects.all()
-    )
-    # tempting to allow setting by item number, but there could be two vendors
-    #  with the same item number...
-    vendor_part_number = serializers.SlugRelatedField(
-        source="vendor_part", slug_field="item_number", read_only=True
-    )
-    part_name = serializers.SlugRelatedField(
-        source="vendor_part.part", slug_field="name", read_only=True
-    )
-    part_description = serializers.SlugRelatedField(
-        source="vendor_part.part", slug_field="description", read_only=True
-    )
-    part_value = serializers.SlugRelatedField(
-        source="vendor_part.part", slug_field="value", read_only=True
     )
 
     class Meta:
@@ -156,16 +225,32 @@ class VendorOrderLineSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "vendor_part_id",
-            "vendor_part_number",
+            "vendor_order_id",
             "quantity",
+            "cost",
             "for_inventory_id",
         )
 
 
 class InventoryLineSerializer(serializers.ModelSerializer):
+    part_id = serializers.PrimaryKeyRelatedField(
+        source="part", queryset=models.Part.objects.all()
+    )
+    inventory_id = serializers.PrimaryKeyRelatedField(
+        source="inventory", queryset=models.Inventory.objects.all()
+    )
+
     class Meta:
         model = models.InventoryLine
-        fields = "__all__"
+        fields = (
+            "id",
+            "part_id",
+            "quantity",
+            "inventory_id",
+            "created",
+            "updated",
+            "is_deprioritized",
+        )
 
 
 class InventoryActionSerializer(serializers.ModelSerializer):
