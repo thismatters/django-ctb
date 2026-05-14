@@ -632,7 +632,7 @@ class ProjectBuildPartReservation(models.Model):
     )
     # There may be more than one inventory action per reservation, given more
     # than one inventory line represents the part and any lacks sufficient
-    # stock to complete the build alone (inventory actions cannot apply to
+    # stock to complete the build alone (inventory actions **cannot** apply to
     # more than one reservation). (InventoryActions track the ``reservation``)
 
     created = models.DateTimeField(default=timezone.now)

@@ -321,8 +321,8 @@ class TestCRUD:
             self.resource.refresh_from_db()
 
 
-class TestCRUDManyToMany:
-    def test_package_create_accepts_footprints(self, user_authed_api_client, db):
+class TestPackageManyToMany:
+    def test_create_accepts_footprints(self, user_authed_api_client, db):
         footprint_names = []
         for _ in range(5):
             footprint_build = fac.FootprintFactory.build()
@@ -347,7 +347,7 @@ class TestCRUDManyToMany:
             deep_print(fp)
         assert {fp.name for fp in created.footprints.all()} == set(footprint_names)
 
-    def test_package_update_accepts_footprints(self, user_authed_api_client, package):
+    def test_update_accepts_footprints(self, user_authed_api_client, package):
         footprint_instances = []
         for _ in range(5):
             footprint = fac.FootprintFactory()
@@ -372,14 +372,169 @@ class TestCRUDManyToMany:
         }
         assert m.Footprint.objects.get(id=update_footprint.id).name == "some other name"
 
-    def test_package_update_rejects_unknown_footprints(
-        self, user_authed_api_client, package
-    ):
-        footprint_instances = []
+    def test_update_rejects_unknown_footprints(self, user_authed_api_client, package):
         response = user_authed_api_client.patch(
             reverse("django-ctb-api:package-detail", kwargs={"pk": package.id}),
             {
                 "footprints": [{"id": 4000}],
+            },
+            format="json",
+        )
+        assert (
+            response.status_code == status.HTTP_400_BAD_REQUEST
+        ), f"Bad response ({response.status_code}, expected 400) {response.text}"
+
+
+class TestProjectBuildManyToMany:
+    def test_create_accepts_excluded_project_parts(
+        self, user_authed_api_client, project_version
+    ):
+        excluded_parts = []
+        for _ in range(5):
+            project_part = fac.ProjectPartFactory()
+            deep_print(project_part)
+            excluded_parts.append(project_part)
+        response = user_authed_api_client.post(
+            reverse("django-ctb-api:project-build-list"),
+            {
+                "project_version_id": project_version.id,
+                "quantity": 1,
+                "excluded_project_parts": [{"id": ep.id} for ep in excluded_parts],
+            },
+            format="json",
+        )
+        assert (
+            response.status_code == status.HTTP_201_CREATED
+        ), f"Bad response ({response.status_code}, expected 201) {response.text}"
+        data = response.json()
+        created = m.ProjectBuild.objects.get(id=data["id"])
+        print("These excluded_project_parts are related to the created project build:")
+        for ep in created.excluded_project_parts.all():
+            deep_print(ep)
+        assert {ep.id for ep in created.excluded_project_parts.all()} == set(
+            [ep.id for ep in excluded_parts]
+        )
+        created.delete()
+        [ep.delete() for ep in excluded_parts]
+
+    def test_update_accepts_excluded_project_parts(
+        self, user_authed_api_client, project_build
+    ):
+        excluded_parts = []
+        for _ in range(5):
+            excluded_part = fac.ProjectPartFactory()
+            deep_print(excluded_part)
+            excluded_parts.append(excluded_part)
+        update_excluded_part = fac.ProjectPartFactory()
+        response = user_authed_api_client.patch(
+            reverse(
+                "django-ctb-api:project-build-detail", kwargs={"pk": project_build.id}
+            ),
+            {
+                "excluded_project_parts": [{"id": fp.id} for fp in excluded_parts]
+                + [{"id": update_excluded_part.id}],
+            },
+            format="json",
+        )
+        assert (
+            response.status_code == status.HTTP_200_OK
+        ), f"Bad response ({response.status_code}, expected 200) {response.text}"
+        data = response.json()
+        created = m.ProjectBuild.objects.get(id=data["id"])
+        assert set(created.excluded_project_parts.all()) == set(excluded_parts) | {
+            update_excluded_part  # type: ignore
+        }
+        [ep.delete() for ep in excluded_parts + [update_excluded_part]]
+
+    def test_update_rejects_unknown_excluded_project_parts(
+        self, user_authed_api_client, project_build
+    ):
+        response = user_authed_api_client.patch(
+            reverse(
+                "django-ctb-api:project-build-detail", kwargs={"pk": project_build.id}
+            ),
+            {
+                "excluded_project_parts": [{"id": 4000}],
+            },
+            format="json",
+        )
+        assert (
+            response.status_code == status.HTTP_400_BAD_REQUEST
+        ), f"Bad response ({response.status_code}, expected 400) {response.text}"
+
+
+class TestProjectBuildPartReservationManyToMany:
+    def test_create_accepts_project_parts(
+        self, user_authed_api_client, project_build, part
+    ):
+        _project_parts = []
+        for _ in range(5):
+            project_part = fac.ProjectPartFactory(part=part)
+            deep_print(project_part)
+            _project_parts.append(project_part)
+        response = user_authed_api_client.post(
+            reverse("django-ctb-api:project-build-part-reservation-list"),
+            {
+                "project_build_id": project_build.id,
+                "part_id": part.id,
+                "project_parts": [{"id": ep.id} for ep in _project_parts],
+            },
+            format="json",
+        )
+        assert (
+            response.status_code == status.HTTP_201_CREATED
+        ), f"Bad response ({response.status_code}, expected 201) {response.text}"
+        data = response.json()
+        created = m.ProjectBuildPartReservation.objects.get(id=data["id"])
+        print("These project_parts are related to the created project build:")
+        for ep in created.project_parts.all():
+            deep_print(ep)
+        assert {ep.id for ep in created.project_parts.all()} == set(
+            [ep.id for ep in _project_parts]
+        )
+        created.delete()
+        [ep.delete() for ep in _project_parts]
+
+    def test_update_accepts_project_parts(
+        self, user_authed_api_client, project_build_part_reservation
+    ):
+        _project_parts = []
+        for _ in range(5):
+            project_part_part = fac.ProjectPartFactory()
+            deep_print(project_part_part)
+            _project_parts.append(project_part_part)
+        update_project_part = fac.ProjectPartFactory()
+        response = user_authed_api_client.patch(
+            reverse(
+                "django-ctb-api:project-build-part-reservation-detail",
+                kwargs={"pk": project_build_part_reservation.id},
+            ),
+            {
+                "project_parts": [{"id": fp.id} for fp in _project_parts]
+                + [{"id": update_project_part.id}],
+            },
+            format="json",
+        )
+        assert (
+            response.status_code == status.HTTP_200_OK
+        ), f"Bad response ({response.status_code}, expected 200) {response.text}"
+        data = response.json()
+        created = m.ProjectBuildPartReservation.objects.get(id=data["id"])
+        assert set(created.project_parts.all()) == set(_project_parts) | {
+            update_project_part  # type: ignore
+        }
+        [ep.delete() for ep in _project_parts + [update_project_part]]
+
+    def test_update_rejects_unknown_project_parts(
+        self, user_authed_api_client, project_build_part_reservation
+    ):
+        response = user_authed_api_client.patch(
+            reverse(
+                "django-ctb-api:project-build-part-reservation-detail",
+                kwargs={"pk": project_build_part_reservation.id},
+            ),
+            {
+                "project_parts": [{"id": 4000}],
             },
             format="json",
         )

@@ -356,6 +356,21 @@ class SimpleProjectPartSerializer(serializers.ModelSerializer):
         model = models.ProjectPart
         fields = ("id",)
 
+    def run_validation(self, data):
+        _id = data.pop("id", None)
+        validated = super().run_validation(data)
+        # if an ID is given, ensure that it matches an existing footprint!
+        if _id is not None:
+            if not models.ProjectPart.objects.filter(id=_id).exists():
+                raise serializers.ValidationError(f"Unknown project part with id {_id}")
+            validated["id"] = _id
+        return validated
+
+    def to_internal_value(self, data):
+        # This simplification keeps `id` in `data` (so that we can look up
+        #   the instance later)
+        return data
+
 
 class ProjectBuildSerializer(WritableNestedFieldMixin, serializers.ModelSerializer):
     project_version_id = serializers.PrimaryKeyRelatedField(

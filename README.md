@@ -48,8 +48,15 @@ CTB_MOUSER_API_KEY = "put-your-real-mouser-api-key-here-yall"
 ### TODO v0.2.0
 
 #### Changed
-- [proj] to use `just` (from `make`) for project management commands
-- drf integration
+- drf integration -- API enables Svelte frontend
+  - [x] with CRUD (+tests)
+  - with auth (+tests)
+  - with ownership tests (other users don't see my projects)
+  - with pagination (+tests)
+  - with filters (+tests)
+  - with actions (+tests)
+- `Inventory` to be a One-to-One mapping to `Owner`, implicitly created.
+
 - Incorporate analytics methods as actions... maybe persist top recommendations?
   - Test robustly
 
@@ -62,6 +69,7 @@ CTB_MOUSER_API_KEY = "put-your-real-mouser-api-key-here-yall"
 
 - Start designing frontend!
   - Minimal means to create a Mouser Part (mouser part number, Symbol (e.g. "U"), Footprint)
+    - This is actually already automated via BOM.
   - Project index
     - breakdown of versions
       - BOM link
