@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, NamedTuple, cast
 from django.db import models
 from django.db.models.fields.generated import GeneratedField
@@ -116,11 +117,60 @@ test_params = [
         factory=fac.VendorOrderLineFactory,
     ),
     APITestParam(
+        basename="inventory-action",
+        fixture_name="inventory_action",
+        model=m.InventoryAction,
+        serializer_klass=s.InventoryActionSerializer,
+        factory=fac.InventoryActionFactory,
+    ),
+    APITestParam(
         basename="project",
         fixture_name="project",
         model=m.Project,
         serializer_klass=s.ProjectSerializer,
         factory=fac.ProjectFactory,
+    ),
+    APITestParam(
+        basename="project-version",
+        fixture_name="project_version",
+        model=m.ProjectVersion,
+        serializer_klass=s.ProjectVersionSerializer,
+        factory=fac.ProjectVersionFactory,
+    ),
+    APITestParam(
+        basename="project-part",
+        fixture_name="project_part",
+        model=m.ProjectPart,
+        serializer_klass=s.ProjectPartSerializer,
+        factory=fac.ProjectPartFactory,
+    ),
+    APITestParam(
+        basename="project-part-footprint-ref",
+        fixture_name="project_part_footprint_ref",
+        model=m.ProjectPartFootprintRef,
+        serializer_klass=s.ProjectPartFootprintRefSerializer,
+        factory=fac.ProjectPartFootprintRefFactory,
+    ),
+    APITestParam(
+        basename="project-build",
+        fixture_name="project_build",
+        model=m.ProjectBuild,
+        serializer_klass=s.ProjectBuildSerializer,
+        factory=fac.ProjectBuildFactory,
+    ),
+    APITestParam(
+        basename="project-build-part-shortage",
+        fixture_name="project_build_part_shortage",
+        model=m.ProjectBuildPartShortage,
+        serializer_klass=s.ProjectBuildPartShortageSerializer,
+        factory=fac.ProjectBuildPartShortageFactory,
+    ),
+    APITestParam(
+        basename="project-build-part-reservation",
+        fixture_name="project_build_part_reservation",
+        model=m.ProjectBuildPartReservation,
+        serializer_klass=s.ProjectBuildPartReservationSerializer,
+        factory=fac.ProjectBuildPartReservationFactory,
     ),
 ]
 
@@ -178,7 +228,9 @@ class TestCRUD:
                 if isinstance(field, GeneratedField):
                     # don't compare this... it isn't real
                     continue
-                assert getattr(created, field.name) == getattr(instance, field.name)
+                _created_value = getattr(created, field.name)
+                _instance_value = getattr(instance, field.name)
+                assert _created_value == _instance_value
         finally:
             # clean up
             created.delete()

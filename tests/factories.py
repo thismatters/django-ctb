@@ -123,9 +123,12 @@ class ProjectVersionFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.ProjectVersion"
 
-    project = factory.SubFactory(ProjectFactory)  # type: ignore
+    project = factory.Iterator(models.Project.objects.all())  # type: ignore
+    revision = factory.Sequence(lambda x: x)  # type: ignore
+    commit_ref = factory.Sequence(lambda x: f"branch-{x}")  # type: ignore
+    bom_path = factory.Sequence(lambda x: f"bom{x}.csv")  # type: ignore
     pcb_cost = factory.Faker(  # type: ignore
-        "pydecimal", min_value=0.01, max_value=9999, left_digits=4, right_digits=4
+        "pydecimal", min_value=0.01, max_value=9999, left_digits=4, right_digits=2
     )
 
 
@@ -133,22 +136,25 @@ class ProjectPartFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.ProjectPart"
 
-    part = factory.SubFactory(PartFactory)  # type: ignore
-    project_version = factory.SubFactory(ProjectVersionFactory)  # type: ignore
+    part = factory.Iterator(models.Part.objects.all())  # type: ignore
+    project_version = factory.Iterator(models.ProjectVersion.objects.all())  # type: ignore
+    quantity = factory.Faker("random_int", min=1, max=1000)  # type: ignore
+    line_number = factory.Sequence(lambda x: x)  # type: ignore
 
 
 class ProjectPartFootprintRefFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.ProjectPartFootprintRef"
 
-    project_part = factory.SubFactory(ProjectPartFactory)  # type: ignore
+    project_part = factory.Iterator(models.ProjectPart.objects.all())  # type: ignore
+    footprint_ref = factory.Sequence(lambda x: f"F{x}")
 
 
 class ProjectBuildFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.ProjectBuild"
 
-    project_version = factory.SubFactory(ProjectVersionFactory)  # type: ignore
+    project_version = factory.Iterator(models.ProjectVersion.objects.all())  # type: ignore
     quantity = factory.Faker("random_int", min=1, max=10)  # type: ignore
 
     @factory.post_generation  # type: ignore
@@ -163,16 +169,17 @@ class ProjectBuildPartShortageFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.ProjectBuildPartShortage"
 
-    part = factory.SubFactory(PartFactory)  # type: ignore
-    project_build = factory.SubFactory(ProjectBuildFactory)  # type: ignore
+    part = factory.Iterator(models.Part.objects.all())  # type: ignore
+    project_build = factory.Iterator(models.ProjectBuild.objects.all())  # type: ignore
+    quantity = factory.Faker("random_int", min=1, max=10)  # type: ignore
 
 
 class ProjectBuildPartReservationFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.ProjectBuildPartReservation"
 
-    part = factory.SubFactory(PartFactory)  # type: ignore
-    project_build = factory.SubFactory(ProjectBuildFactory)  # type: ignore
+    part = factory.Iterator(models.Part.objects.all())  # type: ignore
+    project_build = factory.Iterator(models.ProjectBuild.objects.all())  # type: ignore
 
     @factory.post_generation  # type: ignore
     def project_parts(self, create, extracted, **kwargs):
@@ -186,6 +193,5 @@ class InventoryActionFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.InventoryAction"
 
-    inventory_line = factory.SubFactory(InventoryLineFactory)  # type: ignore
-    # order_line = factory.SubFactory(VendorOrderLineFactory)  # type: ignore
-    # reservation = factory.SubFactory(ProjectBuildPartReservationFactory)  # type: ignore
+    inventory_line = factory.Iterator(models.InventoryLine.objects.all())  # type: ignore
+    delta = factory.Faker("random_int", min=-10000, max=-10000)  # type: ignore

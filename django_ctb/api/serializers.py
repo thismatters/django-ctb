@@ -1,6 +1,8 @@
 # noqa: D101
 import logging
 
+import django
+from django.db import models as django_models
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
@@ -30,45 +32,56 @@ class FootprintSerializer(serializers.ModelSerializer):
         return data
 
 
-class PackageSerializer(serializers.ModelSerializer):
+class WritableNestedFieldMixin:
+    def _get_instances(self, data, *, model_klass, serializer_klass):
+        instances = []
+        for datum in data:
+            # the id for this has already been validated
+            _id = datum.pop("id", None)
+            _instance = None
+            if _id is not None:
+                _instance = model_klass.objects.get(id=_id)
+            if datum:  # may be empty after that pop
+                if _instance:
+                    _serializer = serializer_klass(
+                        instance=_instance, data=datum, partial=True
+                    )
+                else:
+                    _serializer = serializer_klass(data=datum)
+                _serializer.is_valid(raise_exception=True)
+                _instance = _serializer.save()
+            instances.append(_instance)
+        return instances
+
+
+class PackageSerializer(WritableNestedFieldMixin, serializers.ModelSerializer):
     footprints = FootprintSerializer(many=True)
 
     class Meta:
         model = models.Package
         fields = ("id", "name", "technology", "footprints")
 
-    def _get_footprint_instances(self, footprints):
-        footprint_instances = []
-        for footprint in footprints:
-            # the id for this has already been validated
-            footprint_id = footprint.pop("id", None)
-            footprint_instance = None
-            if footprint_id is not None:
-                footprint_instance = models.Footprint.objects.get(id=footprint_id)
-            if footprint:  # may be empty after that pop
-                if footprint_instance:
-                    _serializer = FootprintSerializer(
-                        instance=footprint_instance, data=footprint, partial=True
-                    )
-                else:
-                    _serializer = FootprintSerializer(data=footprint)
-                _serializer.is_valid(raise_exception=True)
-                footprint_instance = _serializer.save()
-            footprint_instances.append(footprint_instance)
-        return footprint_instances
-
     def create(self, validated_data):
         footprints = validated_data.pop("footprints", [])
         instance = super().create(validated_data)
-        footprint_instances = self._get_footprint_instances(footprints=footprints)
+        footprint_instances = self._get_instances(
+            footprints,
+            model_klass=models.Footprint,
+            serializer_klass=FootprintSerializer,
+        )
         instance.footprints.set(footprint_instances)
         return instance
 
     def update(self, instance, validated_data):
-        footprints = validated_data.pop("footprints", [])
+        footprints = validated_data.pop("footprints", None)
         instance = super().update(instance, validated_data)
-        footprint_instances = self._get_footprint_instances(footprints=footprints)
-        instance.footprints.set(footprint_instances)
+        if footprints is not None:
+            footprint_instances = self._get_instances(
+                footprints,
+                model_klass=models.Footprint,
+                serializer_klass=FootprintSerializer,
+            )
+            instance.footprints.set(footprint_instances)
         return instance
 
 
@@ -134,12 +147,10 @@ class PartSerializer(serializers.ModelSerializer):
 
 class VendorPartSerializer(serializers.ModelSerializer):
     vendor_id = serializers.PrimaryKeyRelatedField(
-        source="vendor",
-        queryset=models.Vendor.objects.all(),
+        source="vendor", queryset=models.Vendor.objects.all()
     )
     part_id = serializers.PrimaryKeyRelatedField(
-        source="part",
-        queryset=models.Part.objects.all(),
+        source="part", queryset=models.Part.objects.all()
     )
 
     class Meta:
@@ -167,12 +178,10 @@ class OwnerSerializer(serializers.ModelSerializer):
 
 class ImplicitProjectPartSerializer(serializers.ModelSerializer):
     part_id = serializers.PrimaryKeyRelatedField(
-        source="part",
-        queryset=models.Part.objects.all(),
+        source="part", queryset=models.Part.objects.all()
     )
     for_package_id = serializers.PrimaryKeyRelatedField(
-        source="for_package",
-        queryset=models.Package.objects.all(),
+        source="for_package", queryset=models.Package.objects.all()
     )
 
     class Meta:
@@ -254,9 +263,30 @@ class InventoryLineSerializer(serializers.ModelSerializer):
 
 
 class InventoryActionSerializer(serializers.ModelSerializer):
+    inventory_line_id = serializers.PrimaryKeyRelatedField(
+        source="inventory_line", queryset=models.InventoryLine.objects.all()
+    )
+    order_line_id = serializers.PrimaryKeyRelatedField(
+        source="order_line",
+        queryset=models.VendorOrderLine.objects.all(),
+        allow_null=True,
+    )
+    reservation_id = serializers.PrimaryKeyRelatedField(
+        source="reservation",
+        queryset=models.ProjectBuildPartReservation.objects.all(),
+        allow_null=True,
+    )
+
     class Meta:
         model = models.InventoryAction
-        fields = "__all__"
+        fields = (
+            "id",
+            "inventory_line_id",
+            "order_line_id",
+            "reservation_id",
+            "delta",
+            "created",
+        )
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -266,36 +296,174 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class ProjectVersionSerializer(serializers.ModelSerializer):
+    project_id = serializers.PrimaryKeyRelatedField(
+        source="project", queryset=models.Project.objects.all()
+    )
+
     class Meta:
         model = models.ProjectVersion
-        fields = "__all__"
+        fields = (
+            "id",
+            "project_id",
+            "revision",
+            "commit_ref",
+            "bom_path",
+            "pcb_url",
+            "pcb_cost",
+            "synced",
+            "last_synced_commit",
+        )
 
 
 class ProjectPartSerializer(serializers.ModelSerializer):
+    project_version_id = serializers.PrimaryKeyRelatedField(
+        source="project_version", queryset=models.ProjectVersion.objects.all()
+    )
+    part_id = serializers.PrimaryKeyRelatedField(
+        source="part", queryset=models.Part.objects.all()
+    )
+    substitute_part_id = serializers.PrimaryKeyRelatedField(
+        source="substitute_part", queryset=models.Part.objects.all(), allow_null=True
+    )
+
     class Meta:
         model = models.ProjectPart
-        fields = "__all__"
+        fields = (
+            "id",
+            "project_version_id",
+            "part_id",
+            "substitute_part_id",
+            "missing_part_description",
+            "line_number",
+            "quantity",
+            "is_implicit",
+            "is_optional",
+        )
 
 
 class ProjectPartFootprintRefSerializer(serializers.ModelSerializer):
+    project_part_id = serializers.PrimaryKeyRelatedField(
+        source="project_part", queryset=models.ProjectPart.objects.all()
+    )
+
     class Meta:
         model = models.ProjectPartFootprintRef
-        fields = "__all__"
+        fields = ("id", "project_part_id", "footprint_ref")
 
 
-class ProjectBuildSerializer(serializers.ModelSerializer):
+class SimpleProjectPartSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.ProjectPart
+        fields = ("id",)
+
+
+class ProjectBuildSerializer(WritableNestedFieldMixin, serializers.ModelSerializer):
+    project_version_id = serializers.PrimaryKeyRelatedField(
+        source="project_version", queryset=models.ProjectVersion.objects.all()
+    )
+    excluded_project_parts = SimpleProjectPartSerializer(many=True)
+
     class Meta:
         model = models.ProjectBuild
-        fields = "__all__"
+        fields = (
+            "id",
+            "project_version_id",
+            "quantity",
+            "created",
+            "cleared",
+            "completed",
+            "excluded_project_parts",
+        )
+
+    def create(self, validated_data):
+        excluded_project_parts = validated_data.pop("excluded_project_parts", [])
+        instance = super().create(validated_data)
+        project_parts = self._get_instances(
+            excluded_project_parts,
+            model_klass=models.ProjectPart,
+            serializer_klass=SimpleProjectPartSerializer,
+        )
+        instance.excluded_project_parts.set(project_parts)
+        return instance
+
+    def update(self, instance, validated_data):
+        excluded_project_parts = validated_data.pop("excluded_project_parts", None)
+        instance = super().update(instance, validated_data)
+        if excluded_project_parts is not None:
+            project_parts = self._get_instances(
+                excluded_project_parts,
+                model_klass=models.ProjectPart,
+                serializer_klass=SimpleProjectPartSerializer,
+            )
+            instance.excluded_project_parts.set(project_parts)
+        return instance
 
 
 class ProjectBuildPartShortageSerializer(serializers.ModelSerializer):
+    part_id = serializers.PrimaryKeyRelatedField(
+        source="part", queryset=models.Part.objects.all()
+    )
+    project_build_id = serializers.PrimaryKeyRelatedField(
+        source="project_build", queryset=models.ProjectBuild.objects.all()
+    )
+    fallback_part_id = serializers.PrimaryKeyRelatedField(
+        source="fallback_part", queryset=models.Part.objects.all(), allow_null=True
+    )
+
     class Meta:
         model = models.ProjectBuildPartShortage
-        fields = "__all__"
+        fields = (
+            "id",
+            "part_id",
+            "quantity",
+            "project_build_id",
+            "fallback_part_id",
+            "created",
+        )
 
 
-class ProjectBuildPartReservationSerializer(serializers.ModelSerializer):
+class ProjectBuildPartReservationSerializer(
+    WritableNestedFieldMixin, serializers.ModelSerializer
+):
+    project_build_id = serializers.PrimaryKeyRelatedField(
+        source="project_build", queryset=models.ProjectBuild.objects.all()
+    )
+    part_id = serializers.PrimaryKeyRelatedField(
+        source="part", queryset=models.Part.objects.all()
+    )
+    project_parts = SimpleProjectPartSerializer(many=True)
+
     class Meta:
         model = models.ProjectBuildPartReservation
-        fields = "__all__"
+        fields = (
+            "id",
+            "project_build_id",
+            "part_id",
+            "project_parts",
+            "created",
+            "utilized",
+            "order_key",
+        )
+
+    def create(self, validated_data):
+        _project_parts = validated_data.pop("project_parts", [])
+        instance = super().create(validated_data)
+        project_parts = self._get_instances(
+            _project_parts,
+            model_klass=models.ProjectPart,
+            serializer_klass=SimpleProjectPartSerializer,
+        )
+        instance.project_parts.set(project_parts)
+        return instance
+
+    def update(self, instance, validated_data):
+        _project_parts = validated_data.pop("project_parts", None)
+        instance = super().update(instance, validated_data)
+        if _project_parts is not None:
+            project_parts = self._get_instances(
+                _project_parts,
+                model_klass=models.ProjectPart,
+                serializer_klass=SimpleProjectPartSerializer,
+            )
+            instance.project_parts.set(project_parts)
+        return instance

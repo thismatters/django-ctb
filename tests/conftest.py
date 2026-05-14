@@ -442,12 +442,11 @@ def inventory_action_factory(
 ):
     lines = []
 
-    def _factory(*, inventory_line=inventory_line, delta, days_ago=None, **kwargs):
+    def _factory(*, inventory_line=inventory_line, days_ago=None, **kwargs):
         if days_ago is not None:
             kwargs["created"] = timezone.now() - datetime.timedelta(days=days_ago)
         line = fac.InventoryActionFactory(
             inventory_line=inventory_line,
-            delta=delta,
             **kwargs,
         )
         lines.append(line)
@@ -458,10 +457,15 @@ def inventory_action_factory(
 
 
 @pytest.fixture
-def project_build_part_shortage_factory(db):
+def inventory_action(inventory_action_factory):
+    return inventory_action_factory()
+
+
+@pytest.fixture
+def project_build_part_shortage_factory(db, part, project_build):
     lines = []
 
-    def _factory(*, part, quantity, project_build):
+    def _factory(*, part=part, quantity=10, project_build=project_build):
         line = fac.ProjectBuildPartShortageFactory(
             part=part,
             quantity=quantity,
@@ -472,6 +476,11 @@ def project_build_part_shortage_factory(db):
 
     yield _factory
     [line.delete() for line in lines]
+
+
+@pytest.fixture
+def project_build_part_shortage(project_build_part_shortage_factory):
+    return project_build_part_shortage_factory()
 
 
 @pytest.fixture
@@ -498,11 +507,10 @@ def project_build_part_reservation(project_build_part_reservation_factory):
     return project_build_part_reservation_factory()
 
 
-# @pytest.fixture
-# def project_part_footprint_ref(db, project_part):
-#     footprint_ref = fac.ProjectPartFootprintRefFactory(
-#         project_part=project_part,
-#         footprint_ref="F2",
-#     )
-#     yield footprint_ref
-#     footprint_ref.delete()
+@pytest.fixture
+def project_part_footprint_ref(db, project_part):
+    footprint_ref = fac.ProjectPartFootprintRefFactory(
+        project_part=project_part,
+    )
+    yield footprint_ref
+    footprint_ref.delete()

@@ -13,19 +13,8 @@ Changes to this project will be documented in this file.
   - `Inventory`
   - `Project`
 - Autogen API docs to test suite
-- REST API to cover all resources:
-  - `Footprint`
-  - `Package`
-  - `Vendor`
-  - `Part`
-  - `VendorPart`
-  - `ImplicitProjectPart`
-  - `VendorOrder`
-  - `Inventory`
-  - `VendorPart`
-  - `InventoryLine`
-  - `VendorOrderLine`
-  - `Project`
+- REST API to cover all resources (except `Owner`)
+
 ### Changed
 - factory test fixtures to use `...Factory` factories
 - service code to respect `owner` for owned resources

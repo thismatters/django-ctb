@@ -22,7 +22,31 @@ router.register(
 router.register(
     "inventory-lines", views.InventoryLineViewSet, basename="inventory-line"
 )
+router.register(
+    "inventory-actions", views.InventoryActionViewSet, basename="inventory-action"
+)
+
 router.register("projects", views.ProjectViewSet, basename="project")
+router.register(
+    "project-versions", views.ProjectVersionViewSet, basename="project-version"
+)
+router.register("project-parts", views.ProjectPartViewSet, basename="project-part")
+router.register(
+    "project-part-footprint-refs",
+    views.ProjectPartFootprintRefViewSet,
+    basename="project-part-footprint-ref",
+)
+router.register("project-builds", views.ProjectBuildViewSet, basename="project-build")
+router.register(
+    "project-build-part-shortages",
+    views.ProjectBuildPartShortageViewSet,
+    basename="project-build-part-shortage",
+)
+router.register(
+    "project-build-part-reservations",
+    views.ProjectBuildPartReservationViewSet,
+    basename="project-build-part-reservation",
+)
 
 app_name = "django-ctb-api"
 

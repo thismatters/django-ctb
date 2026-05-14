@@ -86,7 +86,56 @@ class InventoryLineViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
     owner_ref = "inventory__owner"
 
 
+class InventoryActionViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
+    queryset = models.InventoryAction.objects.all()
+    serializer_class = serializers.InventoryActionSerializer
+    permission_classes = [IsAuthenticated]
+    owner_ref = "inventory_line__inventory__owner"
+
+
 class ProjectViewSet(OwnedModelMixin, viewsets.ModelViewSet):
     queryset = models.Project.objects.all()
     serializer_class = serializers.ProjectSerializer
     permission_classes = [IsAuthenticated]
+
+
+class ProjectVersionViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
+    queryset = models.ProjectVersion.objects.all()
+    serializer_class = serializers.ProjectVersionSerializer
+    permission_classes = [IsAuthenticated]
+    owner_ref = "project__owner"
+
+
+class ProjectPartViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
+    queryset = models.ProjectPart.objects.all()
+    serializer_class = serializers.ProjectPartSerializer
+    permission_classes = [IsAuthenticated]
+    owner_ref = "project_version__project__owner"
+
+
+class ProjectPartFootprintRefViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
+    queryset = models.ProjectPartFootprintRef.objects.all()
+    serializer_class = serializers.ProjectPartFootprintRefSerializer
+    permission_classes = [IsAuthenticated]
+    owner_ref = "project_part__project_version__project__owner"
+
+
+class ProjectBuildViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
+    queryset = models.ProjectBuild.objects.all()
+    serializer_class = serializers.ProjectBuildSerializer
+    permission_classes = [IsAuthenticated]
+    owner_ref = "project_version__project__owner"
+
+
+class ProjectBuildPartShortageViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
+    queryset = models.ProjectBuildPartShortage.objects.all()
+    serializer_class = serializers.ProjectBuildPartShortageSerializer
+    permission_classes = [IsAuthenticated]
+    owner_ref = "project_build__project_version__project__owner"
+
+
+class ProjectBuildPartReservationViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
+    queryset = models.ProjectBuildPartReservation.objects.all()
+    serializer_class = serializers.ProjectBuildPartReservationSerializer
+    permission_classes = [IsAuthenticated]
+    owner_ref = "project_build__project_version__project__owner"
