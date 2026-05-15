@@ -313,7 +313,7 @@ class TestVendorOrderService:
         assert m.VendorOrder.objects.count() == 0
         separate_user = user_factory("bob", email="bob@test.test", password="password")
         separate_owner = owner_factory(user=separate_user)
-        existing_order_with_separate_order = vendor_order_factory(owner=separate_owner)
+        vendor_order_factory(owner=separate_owner)
         assert m.VendorOrder.objects.count() == 1
         s.VendorOrderService()._populate_vendor_order(
             vendor_part=vendor_part, quantity=22, inventory=inventory
@@ -426,11 +426,11 @@ class TestVendorOrderService:
         """
         separate_user = user_factory("bob", email="bob@test.test", password="password")
         separate_owner = owner_factory(user=separate_user)
-        separate_inventory = inventory_factory(owner=separate_owner)
+        inventory_factory(owner=separate_owner)
         project = project_factory(owner=separate_owner)
         project_version = project_version_factory(project=project)
         project_build = project_build_factory(project_version=project_version)
-        shortage = project_build_part_shortage_factory(
+        project_build_part_shortage_factory(
             part=part, quantity=10, project_build=project_build
         )
         assert m.VendorOrder.objects.count() == 0

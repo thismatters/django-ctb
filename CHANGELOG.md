@@ -14,6 +14,9 @@ Changes to this project will be documented in this file.
   - `Project`
 - Autogen API docs to test suite
 - REST API to cover all resources (except `Owner`) with tests.
+  - Actions
+  - Filters provided at package level
+  - Pagination possible at project level (see `test_project`)
 
 ### Changed
 - factory test fixtures to use `...Factory` factories

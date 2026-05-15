@@ -1,6 +1,7 @@
-from django_ctb import models
 import factory
 import factory.fuzzy
+
+from django_ctb import models
 
 
 class FootprintFactory(factory.django.DjangoModelFactory):

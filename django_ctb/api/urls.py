@@ -1,3 +1,4 @@
+# ruff: noqa: D100
 from rest_framework import routers
 
 from django_ctb.api import views

@@ -2,10 +2,10 @@ import datetime
 
 import dramatiq
 import pytest
-from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.utils import timezone
+
 from django_ctb import models as m
-from rest_framework.test import APIClient
 
 from . import factories as fac
 

@@ -48,13 +48,6 @@ CTB_MOUSER_API_KEY = "put-your-real-mouser-api-key-here-yall"
 ### TODO v0.2.0
 
 #### Changed
-- drf integration -- API enables Svelte frontend
-  - [x] with CRUD (+tests)
-  - with auth (+tests)
-  - with ownership tests (other users don't see my projects)
-  - with pagination (+tests)
-  - with filters (+tests)
-  - with actions (+tests)
 - `Inventory` to be a One-to-One mapping to `Owner`, implicitly created.
 
 - Incorporate analytics methods as actions... maybe persist top recommendations?

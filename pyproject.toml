@@ -33,6 +33,7 @@ dependencies = [
     "django-appconf>=1.2.0",
     "requests>=2.32.3",
     "pydantic>=2.12.5",
+    "django-filter>=25.2",
     "djangorestframework>=3.17.1",
 ]
 

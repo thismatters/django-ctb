@@ -1,8 +1,6 @@
-# noqa: D101
+# ruff: noqa: D100, D101, D102
 import logging
 
-import django
-from django.db import models as django_models
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
@@ -482,3 +480,7 @@ class ProjectBuildPartReservationSerializer(
             )
             instance.project_parts.set(project_parts)
         return instance
+
+
+class GenericActionSerializer(serializers.Serializer):
+    pass

@@ -1,9 +1,23 @@
-from django.db.models import query
+# ruff: noqa: D100, D101, D102
+
+from django_filters import rest_framework as filters
+from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from django_ctb import models
 from django_ctb.api import serializers
-from rest_framework.permissions import IsAuthenticated
+from django_ctb.tasks import (
+    cancel_build,
+    clear_to_build,
+    complete_build,
+    complete_order,
+    generate_vendor_orders,
+    populate_mouser_vendor_part,
+    sync_project_version,
+)
 
 
 class OwnedSubModelMixin:
@@ -34,6 +48,8 @@ class PackageViewSet(viewsets.ModelViewSet):
     queryset = models.Package.objects.all()
     serializer_class = serializers.PackageSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = ("technology",)
 
 
 class VendorViewSet(viewsets.ModelViewSet):
@@ -46,12 +62,45 @@ class PartViewSet(viewsets.ModelViewSet):
     queryset = models.Part.objects.all()
     serializer_class = serializers.PartSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = {
+        "name": ["exact", "contains"],
+        "value": ["exact", "contains"],
+        "unit": ["exact"],
+        "symbol": ["exact"],
+        "package__name": ["exact", "contains"],
+    }
 
 
 class VendorPartViewSet(viewsets.ModelViewSet):
     queryset = models.VendorPart.objects.all()
     serializer_class = serializers.VendorPartSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = {
+        "vendor": ["exact"],
+        "vendor__name": ["exact"],
+        "part__name": ["exact", "contains"],
+        "part__value": ["exact", "contains"],
+        "part__unit": ["exact"],
+        "part__symbol": ["exact"],
+        "part__package__name": ["exact", "contains"],
+    }
+
+    @extend_schema(
+        responses={
+            200: serializers.GenericActionSerializer,
+        }
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        serializer_class=serializers.GenericActionSerializer,
+        url_path="populate-mouser",
+    )
+    def populate_mouser(self, request, pk):
+        populate_mouser_vendor_part.send(int(pk))
+        return Response(serializers.GenericActionSerializer().data)
 
 
 class ImplicitProjectPartViewSet(OwnedModelMixin, viewsets.ModelViewSet):
@@ -64,6 +113,20 @@ class VendorOrderViewSet(OwnedModelMixin, viewsets.ModelViewSet):
     queryset = models.VendorOrder.objects.all()
     serializer_class = serializers.VendorOrderSerializer
     permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={
+            200: serializers.GenericActionSerializer,
+        }
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        serializer_class=serializers.GenericActionSerializer,
+    )
+    def fulfill(self, request, pk):
+        complete_order.send(int(pk))
+        return Response(serializers.GenericActionSerializer().data)
 
 
 class InventoryViewSet(OwnedModelMixin, viewsets.ModelViewSet):
@@ -84,6 +147,15 @@ class InventoryLineViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
     serializer_class = serializers.InventoryLineSerializer
     permission_classes = [IsAuthenticated]
     owner_ref = "inventory__owner"
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = {
+        "part": ["exact"],
+        "part__name": ["exact", "contains"],
+        "part__value": ["exact", "contains"],
+        "part__unit": ["exact"],
+        "part__symbol": ["exact"],
+        "part__package__name": ["exact", "contains"],
+    }
 
 
 class InventoryActionViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
@@ -91,6 +163,13 @@ class InventoryActionViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
     serializer_class = serializers.InventoryActionSerializer
     permission_classes = [IsAuthenticated]
     owner_ref = "inventory_line__inventory__owner"
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = {
+        "order_line__vendor_order": ["exact"],
+        "reservation__project_build": ["exact"],
+        "inventory_line": ["exact"],
+        "inventory_line__part": ["exact"],
+    }
 
 
 class ProjectViewSet(OwnedModelMixin, viewsets.ModelViewSet):
@@ -104,6 +183,25 @@ class ProjectVersionViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
     serializer_class = serializers.ProjectVersionSerializer
     permission_classes = [IsAuthenticated]
     owner_ref = "project__owner"
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = {
+        "project": ["exact"],
+        "project__name": ["exact", "contains"],
+    }
+
+    @extend_schema(
+        responses={
+            200: serializers.GenericActionSerializer,
+        }
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        serializer_class=serializers.GenericActionSerializer,
+    )
+    def sync(self, request, pk):
+        sync_project_version.send(int(pk))
+        return Response(serializers.GenericActionSerializer().data)
 
 
 class ProjectPartViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
@@ -111,6 +209,16 @@ class ProjectPartViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
     serializer_class = serializers.ProjectPartSerializer
     permission_classes = [IsAuthenticated]
     owner_ref = "project_version__project__owner"
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = {
+        "project_version": ["exact"],
+        "part": ["exact"],
+        "part__name": ["exact", "contains"],
+        "part__value": ["exact", "contains"],
+        "part__unit": ["exact"],
+        "part__symbol": ["exact"],
+        "part__package__name": ["exact", "contains"],
+    }
 
 
 class ProjectPartFootprintRefViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
@@ -125,6 +233,68 @@ class ProjectBuildViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
     serializer_class = serializers.ProjectBuildSerializer
     permission_classes = [IsAuthenticated]
     owner_ref = "project_version__project__owner"
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = {
+        "project_version": ["exact"],
+    }
+
+    @extend_schema(
+        responses={
+            200: serializers.GenericActionSerializer,
+        }
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        serializer_class=serializers.GenericActionSerializer,
+        url_path="clear-to-build",
+    )
+    def clear_to_build(self, request, pk):
+        clear_to_build.send(int(pk))
+        return Response(serializers.GenericActionSerializer().data)
+
+    @extend_schema(
+        responses={
+            200: serializers.GenericActionSerializer,
+        }
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        serializer_class=serializers.GenericActionSerializer,
+    )
+    def complete(self, request, pk):
+        complete_build.send(int(pk))
+        return Response(serializers.GenericActionSerializer().data)
+
+    @extend_schema(
+        responses={
+            200: serializers.GenericActionSerializer,
+        }
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        serializer_class=serializers.GenericActionSerializer,
+    )
+    def cancel(self, request, pk):
+        cancel_build.send(int(pk))
+        return Response(serializers.GenericActionSerializer().data)
+
+    @extend_schema(
+        responses={
+            200: serializers.GenericActionSerializer,
+        }
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        serializer_class=serializers.GenericActionSerializer,
+        url_path="generate-vendor-orders",
+    )
+    def generate_vendor_orders(self, request, pk):
+        generate_vendor_orders.send([int(pk)])
+        return Response(serializers.GenericActionSerializer().data)
 
 
 class ProjectBuildPartShortageViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
@@ -132,6 +302,11 @@ class ProjectBuildPartShortageViewSet(OwnedSubModelMixin, viewsets.ModelViewSet)
     serializer_class = serializers.ProjectBuildPartShortageSerializer
     permission_classes = [IsAuthenticated]
     owner_ref = "project_build__project_version__project__owner"
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = {
+        "project_build": ["exact"],
+        "part": ["exact"],
+    }
 
 
 class ProjectBuildPartReservationViewSet(OwnedSubModelMixin, viewsets.ModelViewSet):
@@ -139,3 +314,8 @@ class ProjectBuildPartReservationViewSet(OwnedSubModelMixin, viewsets.ModelViewS
     serializer_class = serializers.ProjectBuildPartReservationSerializer
     permission_classes = [IsAuthenticated]
     owner_ref = "project_build__project_version__project__owner"
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_fields = {
+        "project_build": ["exact"],
+        "part": ["exact"],
+    }
