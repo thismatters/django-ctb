@@ -133,13 +133,6 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AlterField(
-            model_name="inventory",
-            name="owner",
-            field=models.ForeignKey(
-                on_delete=django.db.models.deletion.PROTECT, to="django_ctb.owner"
-            ),
-        ),
-        migrations.AlterField(
             model_name="project",
             name="owner",
             field=models.ForeignKey(
