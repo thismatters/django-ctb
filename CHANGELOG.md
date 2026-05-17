@@ -3,6 +3,13 @@ Changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Added
+### Changed
+### Removed
+### Fixed
+
+
+## [0.1.2] -- REST API
+### Added
 - `factory_boy` as dev dependency
 - `djangorestframework` as a dependency
 - `...Factory` for each model in `tests/factories.py`
@@ -10,20 +17,22 @@ Changes to this project will be documented in this file.
 - `ForeignKey` to `Owner` model in
   - `ImplicitProjectPart`
   - `VendorOrder`
-  - `Inventory`
+  - `InventoryLine`
   - `Project`
 - Autogen API docs to test suite
 - REST API to cover all resources (except `Owner`) with tests.
-  - Actions
   - Filters provided at package level
   - Pagination possible at project level (see `test_project`)
-
+  - Actions
 ### Changed
 - factory test fixtures to use `...Factory` factories
 - service code to respect `owner` for owned resources
 - [proj] to use `just` (from `make`) for project management commands
 ### Removed
-### Fixed
+- `Inventory` model. `InventoryLine` now directly tied to `Owner`
+- `for_inventory` field from `VendorOrderLine`
+- support for Django 5.0
+
 
 ## [0.1.1] -- Fallback Parts
 ### Added
@@ -36,6 +45,7 @@ Changes to this project will be documented in this file.
 - Bug in admin preventing Project Builds from displaying
 - Build BOM displaying multiple inventory actions
 - Type issues on project version BOM
+
 
 ## [0.1.0]
 ### DATABASE BREAKING CHANGES

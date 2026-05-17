@@ -79,20 +79,12 @@ class VendorOrderFactory(factory.django.DjangoModelFactory):
     vendor = factory.Iterator(models.Vendor.objects.all())  # type: ignore
 
 
-class InventoryFactory(factory.django.DjangoModelFactory):
-    class Meta:  # type: ignore
-        model = "django_ctb.Inventory"
-
-    name = factory.Sequence(lambda x: f"inventory {x}")  # type: ignore
-
-
 class VendorOrderLineFactory(factory.django.DjangoModelFactory):
     class Meta:  # type: ignore
         model = "django_ctb.VendorOrderLine"
 
     vendor_order = factory.Iterator(models.VendorOrder.objects.all())  # type: ignore
     vendor_part = factory.Iterator(models.VendorPart.objects.all())  # type: ignore
-    for_inventory = factory.Iterator(models.Inventory.objects.all())  # type: ignore
 
     # quantity = factory.fuzzy.FuzzyInteger(1, 1000)
     quantity = factory.Faker("random_int", min=1, max=1000)  # type: ignore
@@ -106,7 +98,7 @@ class InventoryLineFactory(factory.django.DjangoModelFactory):
         model = "django_ctb.InventoryLine"
 
     part = factory.Iterator(models.Part.objects.all())  # type: ignore
-    inventory = factory.Iterator(models.Inventory.objects.all())  # type: ignore
+    owner = factory.Iterator(models.Owner.objects.all())  # type: ignore
 
 
 class ProjectFactory(factory.django.DjangoModelFactory):

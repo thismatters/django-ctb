@@ -195,9 +195,10 @@ class Owner(models.Model):
 
 
 class ImplicitProjectPart(models.Model):
-    """Certain parts do not appear on the BOM, but must be used for the final
-    build. These are represented here. e.g. LED bezel, potentiometer knob, even
-    the PCB could fit in this category?"""
+    """
+    Certain parts do not appear on the BOM, but must be used for the final
+    build. These are represented here. e.g. LED bezel, potentiometer knob
+    """
 
     owner = models.ForeignKey(Owner, on_delete=models.CASCADE)
     part = models.ForeignKey(Part, on_delete=models.PROTECT)
@@ -224,22 +225,6 @@ class VendorOrder(models.Model):
         lines: RelatedManager["VendorOrderLine"]
 
 
-class Inventory(models.Model):
-    """
-    Container for complete stock of parts available for usage in project
-    builds.
-    """
-
-    owner = models.ForeignKey(Owner, on_delete=models.PROTECT)
-    name = models.CharField(max_length=64)
-
-    class Meta:
-        verbose_name_plural = "Inventories"
-
-    def __str__(self):  # pragma: no cover
-        return self.name
-
-
 class VendorOrderLine(models.Model):
     """
     Represents lines for individual parts in orders.
@@ -253,7 +238,6 @@ class VendorOrderLine(models.Model):
     )
     quantity = models.PositiveIntegerField()
     cost = models.DecimalField(decimal_places=4, max_digits=8, help_text="per unit")
-    for_inventory = models.ForeignKey(Inventory, on_delete=models.PROTECT)
 
     def __str__(self):  # pragma: no cover
         return (
@@ -269,7 +253,7 @@ class InventoryLine(models.Model):
 
     created = models.DateTimeField(default=timezone.now)
     updated = models.DateTimeField(auto_now=True)
-    inventory = models.ForeignKey(Inventory, on_delete=models.PROTECT)
+    owner = models.ForeignKey(Owner, on_delete=models.PROTECT)
     part = models.ForeignKey(
         Part, on_delete=models.PROTECT, related_name="inventory_lines"
     )

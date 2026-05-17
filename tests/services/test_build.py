@@ -241,7 +241,6 @@ class TestPartSatisfactionManager:
         inventory_line_factory,
         project_part,
         project_build,
-        inventory_factory,
         owner_factory,
         user_factory,
     ):
@@ -263,10 +262,7 @@ class TestPartSatisfactionManager:
         initial_reservation_count = m.ProjectBuildPartReservation.objects.all().count()
         separate_user = user_factory("bob", email="bob@test.test", password="password")
         separate_owner = owner_factory(user=separate_user)
-        separate_inventory = inventory_factory(owner=separate_owner)
-        _line = inventory_line_factory(
-            part=part, quantity=100, inventory=separate_inventory
-        )
+        _line = inventory_line_factory(part=part, quantity=100, owner=separate_owner)
         satisfaction = s.PartSatisfactionManager(part=part, project_build=project_build)
         satisfaction.add_project_part(project_part=project_part)
         with pytest.raises(InsufficientInventory) as exc:

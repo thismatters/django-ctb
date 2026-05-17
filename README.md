@@ -47,9 +47,17 @@ CTB_MOUSER_API_KEY = "put-your-real-mouser-api-key-here-yall"
 
 ### TODO v0.2.0
 
-#### Changed
-- `Inventory` to be a One-to-One mapping to `Owner`, implicitly created.
+#### Added
+- svelte frontend
+  - Component library
+    - InventoryLine
+      - as card
+      - as table row
+    - InventoryBrowser (mouser-like)
+      - Filterboxes
+      - table
 
+#### Changed
 - Incorporate analytics methods as actions... maybe persist top recommendations?
   - Test robustly
 

@@ -15,9 +15,7 @@ class TestVendorOrderService:
     :feature: Vendor Orders can be generated and fulfilled
     """
 
-    def test__complete_order_line(
-        self, vendor_order_line_factory, vendor_part, inventory
-    ):
+    def test__complete_order_line(self, vendor_order_line_factory, vendor_part, owner):
         """
         :scenario: Completing an Order Line will create Inventory Line if necessary
                    and create an Inventory Action
@@ -41,7 +39,7 @@ class TestVendorOrderService:
         inventory_line = m.InventoryLine.objects.all()[0]
         assert inventory_line.quantity == order_line.quantity
         assert inventory_line.part == order_line.vendor_part.part
-        assert inventory_line.inventory == inventory
+        assert inventory_line.owner == owner
         action = m.InventoryAction.objects.all()[0]
         assert action.inventory_line == inventory_line
         assert action.delta == 11
@@ -57,7 +55,7 @@ class TestVendorOrderService:
         :scenario: Complete Order Line Process will update an Inventory Line and
                    create an Inventory Action
 
-        | GIVEN a vendor order has an order line associated to an inventory
+        | GIVEN a vendor order has an order line
         | AND an inventory line exists for the order line part
         | WHEN _complete_order_line is run
         | AND the quantity of parts in the inventory line will be increased by
@@ -216,7 +214,7 @@ class TestVendorOrderService:
             s.VendorOrderService()._select_vendor_part(part)
 
     def test__populate_vendor_order(
-        self, vendor_part, vendor, vendor_order, vendor_order_line, inventory
+        self, vendor_part, vendor, vendor_order, vendor_order_line, owner
     ):
         """
         :scenario: Populate Vendor Order Process will add to an existing Order
@@ -232,15 +230,13 @@ class TestVendorOrderService:
 
         assert vendor_order.lines.count() == 1
         s.VendorOrderService()._populate_vendor_order(
-            vendor_part=vendor_part, quantity=22, inventory=inventory
+            vendor_part=vendor_part, quantity=22, owner=owner
         )
         vendor_order_line.refresh_from_db()
         assert vendor_order.lines.count() == 1
         assert vendor_order_line.quantity == 32
 
-    def test__populate_vendor_order__new_line(
-        self, vendor_part, vendor_order, inventory
-    ):
+    def test__populate_vendor_order__new_line(self, vendor_part, vendor_order, owner):
         """
         :scenario: Populate Vendor Order Process will create a new Order Line
                    in an existing Vendor Order as needed.
@@ -255,14 +251,14 @@ class TestVendorOrderService:
         """
         assert vendor_order.lines.count() == 0
         s.VendorOrderService()._populate_vendor_order(
-            vendor_part=vendor_part, quantity=22, inventory=inventory
+            vendor_part=vendor_part, quantity=22, owner=owner
         )
         assert vendor_order.lines.count() == 1
         assert vendor_order.lines.all()[0].quantity == 22
         assert vendor_order.lines.all()[0].vendor_part == vendor_part
         vendor_order.lines.all()[0].delete()
 
-    def test__populate_vendor_order__new_order(self, vendor_part, inventory):
+    def test__populate_vendor_order__new_order(self, vendor_part, owner):
         """
         :scenario: Populate Vendor Order Process will create a new Vendor Order
                    when no open Vendor Order exists.
@@ -276,7 +272,7 @@ class TestVendorOrderService:
         """
         assert m.VendorOrder.objects.count() == 0
         s.VendorOrderService()._populate_vendor_order(
-            vendor_part=vendor_part, quantity=22, inventory=inventory
+            vendor_part=vendor_part, quantity=22, owner=owner
         )
         assert m.VendorOrder.objects.count() == 1
         vendor_order = m.VendorOrder.objects.all()[0]
@@ -290,9 +286,7 @@ class TestVendorOrderService:
     def test__populate_vendor_order__respects_owner(
         self,
         vendor_part,
-        inventory,
         vendor,
-        inventory_factory,
         owner,
         owner_factory,
         vendor_order_factory,
@@ -316,7 +310,7 @@ class TestVendorOrderService:
         vendor_order_factory(owner=separate_owner)
         assert m.VendorOrder.objects.count() == 1
         s.VendorOrderService()._populate_vendor_order(
-            vendor_part=vendor_part, quantity=22, inventory=inventory
+            vendor_part=vendor_part, quantity=22, owner=owner
         )
         assert m.VendorOrder.objects.count() == 2
         vendor_order = m.VendorOrder.objects.all()[1]
@@ -338,7 +332,6 @@ class TestVendorOrderService:
         vendor_mouser,
         vendor_part_factory,
         vendor,
-        inventory,
     ):
         """
         :scenario: Generate Vendor Orders Process will create Vendor Orders and
@@ -385,21 +378,6 @@ class TestVendorOrderService:
         s.VendorOrderService().generate_vendor_orders(1234)
         assert m.VendorOrder.objects.count() == 0
 
-    def test_generate_vendor_orders__no_inventory(self, db, project_build):
-        """
-        :scenario: Generate Vendor Orders Process requires Inventory
-
-        | GIVEN a project build exists
-        | AND no inventory exists
-        | WHEN generate_vendor_orders is called for the project build
-        | THEN no vendor orders are generated
-        """
-
-        assert m.Inventory.objects.count() == 0
-        assert m.VendorOrder.objects.count() == 0
-        s.VendorOrderService().generate_vendor_orders(project_build.pk)
-        assert m.VendorOrder.objects.count() == 0
-
     def test_generate_vendor_orders__respects_owner(
         self,
         part,
@@ -409,8 +387,6 @@ class TestVendorOrderService:
         project_build_factory,
         owner,
         owner_factory,
-        inventory,
-        inventory_factory,
         project_build_part_shortage_factory,
         user_factory,
     ):
@@ -426,7 +402,6 @@ class TestVendorOrderService:
         """
         separate_user = user_factory("bob", email="bob@test.test", password="password")
         separate_owner = owner_factory(user=separate_user)
-        inventory_factory(owner=separate_owner)
         project = project_factory(owner=separate_owner)
         project_version = project_version_factory(project=project)
         project_build = project_build_factory(project_version=project_version)

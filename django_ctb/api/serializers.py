@@ -210,21 +210,12 @@ class VendorOrderSerializer(serializers.ModelSerializer):
         )
 
 
-class InventorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = models.Inventory
-        fields = ("id", "name")
-
-
 class VendorOrderLineSerializer(serializers.ModelSerializer):
     vendor_order_id = serializers.PrimaryKeyRelatedField(
         source="vendor_order", queryset=models.VendorOrder.objects.all()
     )
     vendor_part_id = serializers.PrimaryKeyRelatedField(
         source="vendor_part", queryset=models.VendorPart.objects.all()
-    )
-    for_inventory_id = serializers.PrimaryKeyRelatedField(
-        source="for_inventory", queryset=models.Inventory.objects.all()
     )
 
     class Meta:
@@ -235,16 +226,12 @@ class VendorOrderLineSerializer(serializers.ModelSerializer):
             "vendor_order_id",
             "quantity",
             "cost",
-            "for_inventory_id",
         )
 
 
 class InventoryLineSerializer(serializers.ModelSerializer):
     part_id = serializers.PrimaryKeyRelatedField(
         source="part", queryset=models.Part.objects.all()
-    )
-    inventory_id = serializers.PrimaryKeyRelatedField(
-        source="inventory", queryset=models.Inventory.objects.all()
     )
 
     class Meta:
@@ -253,7 +240,6 @@ class InventoryLineSerializer(serializers.ModelSerializer):
             "id",
             "part_id",
             "quantity",
-            "inventory_id",
             "created",
             "updated",
             "is_deprioritized",

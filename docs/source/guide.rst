@@ -119,12 +119,12 @@ When orders are ``fulfilled`` the parts in the order will be represented as inve
 
 ``VendorOrder`` objects are explicitly tied to an ``owner``.
 
-Inventory & InventoryLine
+InventoryLine
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 A collection of parts on hand as represented by individual lines. Inventory lines reference a specific ``part`` (independent of ``vendor_part``) and provide the quantity of unreserved parts on hand.
 
-``Inventory`` objects are explicitly tied to an ``owner``.
+``InventoryLine`` objects are explicitly tied to an ``owner``.
 
 InventoryAction
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

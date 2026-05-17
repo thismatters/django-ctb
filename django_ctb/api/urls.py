@@ -16,7 +16,6 @@ router.register(
     basename="implicit-project-part",
 )
 router.register("vendor-orders", views.VendorOrderViewSet, basename="vendor-order")
-router.register("inventories", views.InventoryViewSet, basename="inventory")
 router.register(
     "vendor-order-lines", views.VendorOrderLineViewSet, basename="vendor-order-line"
 )

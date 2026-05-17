@@ -106,7 +106,7 @@ class VendorPartInline(admin.TabularInline):
 
 class InventoryLineInline(admin.TabularInline):
     fields = (
-        "inventory",
+        "owner",
         "quantity",
         "is_deprioritized",
         "link",
@@ -158,11 +158,6 @@ class ImplicitProjectPartAdmin(admin.ModelAdmin):
     list_display = ("part", "for_package", "quantity")
 
 
-@admin.register(models.Inventory)
-class InventoryAdmin(admin.ModelAdmin):
-    list_display = ("name",)
-
-
 class InventoryActionInline(admin.TabularInline):
     fields = ("delta", "order_line", "reservation", "created")
     model = models.InventoryAction
@@ -172,9 +167,9 @@ class InventoryActionInline(admin.TabularInline):
 
 @admin.register(models.InventoryLine)
 class InventoryLineAdmin(admin.ModelAdmin):
-    list_display = ("part", "quantity", "inventory", "item_numbers")
+    list_display = ("part", "quantity", "owner", "item_numbers")
     list_filter = (
-        "inventory",
+        "owner",
         "part__symbol",
         "part__package__name",
         "part__value",

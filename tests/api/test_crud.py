@@ -35,6 +35,12 @@ def other_user_authed_api_client(user_factory, api_client):
     return api_client
 
 
+def assert_status(response, status_code):
+    assert (
+        response.status_code == status_code
+    ), f"Bad response ({response.status_code}, expected {status_code}) {response.text}"
+
+
 def deep_print(instance: models.Model):
     """Print all attributes for the class"""
     print(f"model: {type(instance)}")
@@ -110,13 +116,6 @@ test_params = [
         factory=fac.VendorOrderFactory,
     ),
     APITestParam(  # has direct relation to ``owner``
-        basename="inventory",
-        fixture_name="inventory",
-        model=m.Inventory,
-        serializer_klass=s.InventorySerializer,
-        factory=fac.InventoryFactory,
-    ),
-    APITestParam(
         basename="inventory-line",
         fixture_name="inventory_line",
         model=m.InventoryLine,
@@ -228,9 +227,7 @@ class TestCRUD:
             reverse(f"django-ctb-api:{self.basename}-list"), serialized, format="json"
         )
         # check response
-        assert response.status_code == status.HTTP_201_CREATED, (
-            f"Bad response ({response.status_code}, expected 201) {response.text}"
-        )
+        assert_status(response, status.HTTP_201_CREATED)
         # check instance created
         print(response.json())
         created = self.model.objects.get(id=response.json()["id"])
@@ -296,9 +293,7 @@ class TestCRUD:
                 kwargs={"pk": self.resource.id},
             )
         )
-        assert response.status_code == status.HTTP_404_NOT_FOUND, (
-            f"Bad response ({response.status_code}, expected 404) {response.text}"
-        )
+        assert_status(response, status.HTTP_404_NOT_FOUND)
 
     def test_update(self, user_authed_api_client):
         instance = self.factory.build()
@@ -314,9 +309,7 @@ class TestCRUD:
             serialized,
             format="json",
         )
-        assert response.status_code == status.HTTP_200_OK, (
-            f"Bad response ({response.status_code}, expected 200) {response.text}"
-        )
+        assert_status(response, status.HTTP_200_OK)
         self.resource.refresh_from_db()
         # TODO: expanded validation here
         for field in instance._meta.concrete_fields:
@@ -332,9 +325,7 @@ class TestCRUD:
         response = user_authed_api_client.get(
             reverse(f"django-ctb-api:{self.basename}-list")
         )
-        assert response.status_code == status.HTTP_200_OK, (
-            f"Bad response ({response.status_code}, expected 200) {response.text}"
-        )
+        assert_status(response, status.HTTP_200_OK)
 
         assert response.json()["results"][0]["id"] == self.resource.id
 
@@ -345,16 +336,12 @@ class TestCRUD:
         response = other_user_authed_api_client.get(
             reverse(f"django-ctb-api:{self.basename}-list")
         )
-        assert response.status_code == status.HTTP_200_OK, (
-            f"Bad response ({response.status_code}, expected 200) {response.text}"
-        )
+        assert_status(response, status.HTTP_200_OK)
         assert len(response.json()["results"]) == 0
 
     def test_list_403_for_non_auth(self, api_client):
         response = api_client.get(reverse(f"django-ctb-api:{self.basename}-list"))
-        assert response.status_code == status.HTTP_403_FORBIDDEN, (
-            f"Bad response ({response.status_code}, expected 403) {response.text}"
-        )
+        assert_status(response, status.HTTP_403_FORBIDDEN)
 
     def test_delete(self, user_authed_api_client):
         response = user_authed_api_client.delete(
@@ -364,9 +351,7 @@ class TestCRUD:
             ),
             {"name": "other test project"},
         )
-        assert response.status_code == status.HTTP_204_NO_CONTENT, (
-            f"Bad response ({response.status_code}, expected 204) {response.text}"
-        )
+        assert_status(response, status.HTTP_204_NO_CONTENT)
         with pytest.raises(self.model.DoesNotExist):
             self.resource.refresh_from_db()
 
@@ -387,9 +372,7 @@ class TestPackageManyToMany:
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_201_CREATED, (
-            f"Bad response ({response.status_code}, expected 201) {response.text}"
-        )
+        assert_status(response, status.HTTP_201_CREATED)
         data = response.json()
         created = m.Package.objects.get(id=data["id"])
         print("These footprints are related to the created package:")
@@ -412,9 +395,7 @@ class TestPackageManyToMany:
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_200_OK, (
-            f"Bad response ({response.status_code}, expected 200) {response.text}"
-        )
+        assert_status(response, status.HTTP_200_OK)
         data = response.json()
         created = m.Package.objects.get(id=data["id"])
         assert set(created.footprints.all()) == set(footprint_instances) | {
@@ -430,9 +411,7 @@ class TestPackageManyToMany:
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST, (
-            f"Bad response ({response.status_code}, expected 400) {response.text}"
-        )
+        assert_status(response, status.HTTP_400_BAD_REQUEST)
 
 
 class TestProjectBuildManyToMany:
@@ -453,9 +432,7 @@ class TestProjectBuildManyToMany:
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_201_CREATED, (
-            f"Bad response ({response.status_code}, expected 201) {response.text}"
-        )
+        assert_status(response, status.HTTP_201_CREATED)
         data = response.json()
         created = m.ProjectBuild.objects.get(id=data["id"])
         print("These excluded_project_parts are related to the created project build:")
@@ -486,9 +463,7 @@ class TestProjectBuildManyToMany:
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_200_OK, (
-            f"Bad response ({response.status_code}, expected 200) {response.text}"
-        )
+        assert_status(response, status.HTTP_200_OK)
         data = response.json()
         created = m.ProjectBuild.objects.get(id=data["id"])
         assert set(created.excluded_project_parts.all()) == set(excluded_parts) | {
@@ -508,9 +483,7 @@ class TestProjectBuildManyToMany:
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST, (
-            f"Bad response ({response.status_code}, expected 400) {response.text}"
-        )
+        assert_status(response, status.HTTP_400_BAD_REQUEST)
 
 
 class TestProjectBuildPartReservationManyToMany:
@@ -531,9 +504,7 @@ class TestProjectBuildPartReservationManyToMany:
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_201_CREATED, (
-            f"Bad response ({response.status_code}, expected 201) {response.text}"
-        )
+        assert_status(response, status.HTTP_201_CREATED)
         data = response.json()
         created = m.ProjectBuildPartReservation.objects.get(id=data["id"])
         print("These project_parts are related to the created project build:")
@@ -565,9 +536,7 @@ class TestProjectBuildPartReservationManyToMany:
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_200_OK, (
-            f"Bad response ({response.status_code}, expected 200) {response.text}"
-        )
+        assert_status(response, status.HTTP_200_OK)
         data = response.json()
         created = m.ProjectBuildPartReservation.objects.get(id=data["id"])
         assert set(created.project_parts.all()) == set(_project_parts) | {
@@ -588,9 +557,7 @@ class TestProjectBuildPartReservationManyToMany:
             },
             format="json",
         )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST, (
-            f"Bad response ({response.status_code}, expected 400) {response.text}"
-        )
+        assert_status(response, status.HTTP_400_BAD_REQUEST)
 
 
 class ActionTestParam(NamedTuple):
@@ -665,9 +632,7 @@ class TestAPIActions:
             {},
             format="json",
         )
-        assert response.status_code == status.HTTP_200_OK, (
-            f"Bad response ({response.status_code}, expected 200) {response.text}"
-        )
+        assert_status(response, status.HTTP_200_OK)
 
         broker.join("default")
         worker.join()

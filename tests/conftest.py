@@ -194,34 +194,12 @@ def implicit_project_part(implicit_project_part_factory):
 
 
 @pytest.fixture
-def inventory_factory(db, owner):
+def inventory_line_factory(db, owner, part):
     lines = []
 
-    def _factory(*, owner=owner, name="Test inventory", **kwargs):
-        line = fac.InventoryFactory(owner=owner, name=name, **kwargs)
-        lines.append(line)
-        return line
-
-    yield _factory
-    for line in lines:
-        try:
-            line.delete()
-        except m.Inventory.DoesNotExist:
-            pass
-
-
-@pytest.fixture
-def inventory(db, inventory_factory):
-    return inventory_factory()
-
-
-@pytest.fixture
-def inventory_line_factory(db, inventory, part):
-    lines = []
-
-    def _factory(*, inventory=inventory, part=part, quantity, is_deprioritized=False):
+    def _factory(*, owner=owner, part=part, quantity, is_deprioritized=False):
         line = fac.InventoryLineFactory(
-            inventory=inventory,
+            owner=owner,
             part=part,
             quantity=quantity,
             is_deprioritized=is_deprioritized,
@@ -410,13 +388,12 @@ def vendor_order(db, vendor_order_factory):
 
 
 @pytest.fixture
-def vendor_order_line_factory(db, vendor_order, inventory, vendor_part):
+def vendor_order_line_factory(db, vendor_order, vendor_part):
     lines = []
 
     def _factory(*, vendor_part=vendor_part, quantity=10, cost=1):
         line = fac.VendorOrderLineFactory(
             vendor_order=vendor_order,
-            for_inventory=inventory,
             quantity=quantity,
             cost=vendor_part.cost,
             vendor_part=vendor_part,
