@@ -26,10 +26,11 @@ class VendorOrderService:
     actions.
     """
 
-    def _complete_order_line(self, order_line):
+    def _complete_order_line(self, order_line: models.VendorOrderLine):
         # resolve part/inventory line
         inventory_line, _ = models.InventoryLine.objects.get_or_create(
-            part=order_line.vendor_part.part, inventory=order_line.for_inventory
+            part=order_line.vendor_part.part,
+            owner=order_line.vendor_order.owner,
         )
         # create inventory action
         models.InventoryAction.objects.create(
@@ -92,10 +93,11 @@ class VendorOrderService:
         *,
         vendor_part: models.VendorPart,
         quantity: int,
-        inventory: models.Inventory,
+        owner: models.Owner,
     ):
         # get (or create) open vendor order for necessary vendor
         vendor_order, _ = models.VendorOrder.objects.get_or_create(
+            owner=owner,
             vendor=vendor_part.vendor,
             placed__isnull=True,
         )
@@ -104,7 +106,6 @@ class VendorOrderService:
             vendor_order=vendor_order,
             vendor_part=vendor_part,
             cost=vendor_part.cost,
-            for_inventory=inventory,
             defaults={"quantity": 0},
         )
         order_line.quantity += quantity
@@ -128,9 +129,6 @@ class VendorOrderService:
             )
         except models.ProjectBuild.DoesNotExist:
             return
-        inventory = models.Inventory.objects.first()
-        if inventory is None:
-            return
         # analyze shortfalls for vendors and item numbers
         _shortfalls = self._accumulate_shortfalls(build)
         for _shortfall in _shortfalls:
@@ -138,9 +136,10 @@ class VendorOrderService:
                 selected_vendor_part = self._select_vendor_part(_shortfall.part)
             except MissingVendorPart:
                 # nothing to do for this part
+                logger.info(f"No vendor part for {_shortfall.part}")
                 continue
             self._populate_vendor_order(
                 vendor_part=selected_vendor_part,
                 quantity=_shortfall.count,
-                inventory=inventory,
+                owner=build.project_version.project.owner,
             )

@@ -106,7 +106,7 @@ class VendorPartInline(admin.TabularInline):
 
 class InventoryLineInline(admin.TabularInline):
     fields = (
-        "inventory",
+        "owner",
         "quantity",
         "is_deprioritized",
         "link",
@@ -148,14 +148,14 @@ class VendorPartAdmin(admin.ModelAdmin):
     _populate.short_description = "Populate fields (Mouser)"  # type: ignore[unresolve-attribute]
 
 
+@admin.register(models.Owner)
+class OwnerAdmin(admin.ModelAdmin):
+    list_display = ("id", "user")
+
+
 @admin.register(models.ImplicitProjectPart)
 class ImplicitProjectPartAdmin(admin.ModelAdmin):
     list_display = ("part", "for_package", "quantity")
-
-
-@admin.register(models.Inventory)
-class InventoryAdmin(admin.ModelAdmin):
-    list_display = ("name",)
 
 
 class InventoryActionInline(admin.TabularInline):
@@ -167,9 +167,9 @@ class InventoryActionInline(admin.TabularInline):
 
 @admin.register(models.InventoryLine)
 class InventoryLineAdmin(admin.ModelAdmin):
-    list_display = ("part", "quantity", "inventory", "item_numbers")
+    list_display = ("part", "quantity", "owner", "item_numbers")
     list_filter = (
-        "inventory",
+        "owner",
         "part__symbol",
         "part__package__name",
         "part__value",

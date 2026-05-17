@@ -39,6 +39,9 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django_extensions",
+    "rest_framework",
+    "django_filters",
+    "drf_spectacular",
     "django_dramatiq",
     "django_ctb",
     "test_project",
@@ -143,5 +146,18 @@ DRAMATIQ_BROKER = {
     ],
 }
 
+REST_FRAMEWORK = {
+    "COERCE_DECIMAL_TO_STRING": False,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "PAGE_SIZE": 100,
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Django Clear to Build API",
+    "DESCRIPTION": "Django app for managing small-scale electronics manufacturing inventory.",
+    "VERSION": "1",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
 
 CTB_MOUSER_API_KEY = os.environ.get("MOUSER_API_KEY", "FAKE")

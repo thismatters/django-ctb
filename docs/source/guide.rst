@@ -46,7 +46,7 @@ Sync Project Version
 Clear to Build
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-- Looks for sufficient quantity in inventory to cover the bill of materials for the project build lot.
+- Looks for sufficient quantity to cover the bills of material for the project build lot in inventories with common owner to project build.
 - If sufficient quantity is found then those parts necessary are reserved from their inventory lines, and the ``ProjectBuild`` ``cleared`` time is persisted.
 - Otherwise, a ``ProjectBuildPartShortage`` is created for each part that is short indicating lacking quantity.
 
@@ -71,7 +71,9 @@ Generate Orders from Shortfalls
 Models
 --------------
 
-Django Clear-To-Build utilizes the following data model to achieve those actions and persist the data required to perform those actions. The relationships between the data are depicted in this handy diagram:
+Django Clear-To-Build utilizes the following data model to achieve those actions and persist the data required to perform those actions.
+
+The relationships between the data are depicted in this handy diagram:
 
 .. thumbnail:: _images/models.png
 
@@ -104,16 +106,25 @@ VendorPart
 
 The representation of a part as sold by a vendor. Pricing, item numbers, url paths are stored here.
 
+Owner
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The entity who owns the physical inventory and projects. This optionally maps to a ``User``. All the models described below this section are traceable (explicitly or indirectly) to an ``owner`` allowing this entity sole access to those resources. Any models documented above this section are shared among all users (although CRUD permissions may still be exercised).
+
 VendorOrder & VendorOrderLine
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Individual orders (and the line items of the order) of parts from a vendor.
 When orders are ``fulfilled`` the parts in the order will be represented as inventory lines.
 
-Inventory & InventoryLine
+``VendorOrder`` objects are explicitly tied to an ``owner``.
+
+InventoryLine
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 A collection of parts on hand as represented by individual lines. Inventory lines reference a specific ``part`` (independent of ``vendor_part``) and provide the quantity of unreserved parts on hand.
+
+``InventoryLine`` objects are explicitly tied to an ``owner``.
 
 InventoryAction
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -124,6 +135,8 @@ Project
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 A thing you are building. This is a thin model with just a name and a url to a git repo. The repo must have a CSV file which is the Bill Of Materials (BOM) for the project. KiCAD generates such BOMs as a default feature.
+
+``Project`` objects are explicitly tied to an ``owner``.
 
 ProjectVersion
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -147,6 +160,8 @@ ImplicitProjectPart
 Sometimes there are parts which don't appear on the bill of materials but that will be included in the final project. An example is the knobs are added to the potentiometer, and the bezels for the LEDs. They're not electrical components, but they are needed for a complete build.
 
 Parts like these can be associated to a given ``Package`` and will be included in as a ``ProjectPart`` when the bill of materials ``sync`` process for a project version is complete.
+
+``ImplicitProjectPart`` objects are explicitly tied to an ``owner``.
 
 ProjectBuild
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

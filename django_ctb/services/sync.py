@@ -68,7 +68,7 @@ class ProjectVersionBomService:
         _part = self._get_matching_parts(row=row).first()
         return _part
 
-    def _sync_footprints(serf, footprint_refs, *, project_part):
+    def _sync_footprints(self, footprint_refs, *, project_part):
         # get rid of any outdated/altered refs
         models.ProjectPartFootprintRef.objects.filter(
             project_part=project_part
@@ -87,7 +87,8 @@ class ProjectVersionBomService:
             )
             return
         implicit_project_parts = models.ImplicitProjectPart.objects.filter(
-            for_package=project_part.part.package
+            owner=project_part.project_version.project.owner,
+            for_package=project_part.part.package,
         )
         project_part_pks = []
         for implicit_project_part in implicit_project_parts:

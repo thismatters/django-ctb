@@ -47,10 +47,17 @@ CTB_MOUSER_API_KEY = "put-your-real-mouser-api-key-here-yall"
 
 ### TODO v0.2.0
 
+#### Added
+- svelte frontend
+  - Component library
+    - InventoryLine
+      - as card
+      - as table row
+    - InventoryBrowser (mouser-like)
+      - Filterboxes
+      - table
+
 #### Changed
-- [proj] to use `just` (from `make`) for project management commands
-- drf integration
-- associate inventory/projects to user
 - Incorporate analytics methods as actions... maybe persist top recommendations?
   - Test robustly
 
@@ -63,6 +70,7 @@ CTB_MOUSER_API_KEY = "put-your-real-mouser-api-key-here-yall"
 
 - Start designing frontend!
   - Minimal means to create a Mouser Part (mouser part number, Symbol (e.g. "U"), Footprint)
+    - This is actually already automated via BOM.
   - Project index
     - breakdown of versions
       - BOM link

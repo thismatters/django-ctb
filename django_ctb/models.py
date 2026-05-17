@@ -5,8 +5,8 @@ Data models (and database models) for stock and projects.
 import re
 from typing import TYPE_CHECKING
 
+from django.conf import settings
 from django.db import models
-from django.db.models.fields import related
 from django.utils import timezone
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
@@ -113,7 +113,7 @@ class Part(models.Model):
 
     if TYPE_CHECKING:
         equivalents: RelatedManager["Part"]
-        part_vendors: RelatedManager["VendorPart"]
+        vendor_parts: RelatedManager["VendorPart"]
         inventory_lines: RelatedManager["InventoryLine"]
 
     def __str__(self):  # pragma: no cover
@@ -124,20 +124,10 @@ class Part(models.Model):
         """
         Extrapolated cost for each individual part
         """
-        part_vendor = self.part_vendors.all().order_by("cost").first()
+        part_vendor = self.vendor_parts.all().order_by("cost").first()
         if part_vendor is not None:
             return float(part_vendor.cost or 0)
         return float(0)
-
-
-class ImplicitProjectPart(models.Model):
-    """Certain parts do not appear on the BOM, but must be used for the final
-    build. These are represented here. e.g. LED bezel, potentiometer knob, even
-    the PCB could fit in this category?"""
-
-    part = models.ForeignKey(Part, on_delete=models.PROTECT)
-    for_package = models.ForeignKey(Package, on_delete=models.PROTECT)
-    quantity = models.SmallIntegerField(default=1)
 
 
 class VendorPart(models.Model):
@@ -150,7 +140,7 @@ class VendorPart(models.Model):
         Vendor, related_name="vendor_parts", on_delete=models.PROTECT
     )
     part = models.ForeignKey(
-        Part, related_name="part_vendors", on_delete=models.CASCADE
+        Part, related_name="vendor_parts", on_delete=models.CASCADE
     )
     item_number = models.CharField(
         max_length=64, help_text="how the vendor identifies the part"
@@ -172,7 +162,7 @@ class VendorPart(models.Model):
     )
     lot_cost = models.GeneratedField(
         expression=models.F("cost") * models.F("volume"),
-        output_field=models.DecimalField(decimal_places=4, max_digits=8),
+        output_field=models.DecimalField(decimal_places=4, max_digits=12),
         db_persist=False,
     )
 
@@ -190,11 +180,38 @@ class VendorPart(models.Model):
         ordering = ("vendor__name", "item_number")
 
 
+class Owner(models.Model):
+    """
+    The entity which owns the Inventories, VendorOrders, Projects, and more.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        related_name="django_ctb_owner",
+        on_delete=models.SET_NULL,
+    )
+
+
+class ImplicitProjectPart(models.Model):
+    """
+    Certain parts do not appear on the BOM, but must be used for the final
+    build. These are represented here. e.g. LED bezel, potentiometer knob
+    """
+
+    owner = models.ForeignKey(Owner, on_delete=models.CASCADE)
+    part = models.ForeignKey(Part, on_delete=models.PROTECT)
+    for_package = models.ForeignKey(Package, on_delete=models.PROTECT)
+    quantity = models.SmallIntegerField(default=1)
+
+
 class VendorOrder(models.Model):
     """
     Represents orders of parts from a vendor.
     """
 
+    owner = models.ForeignKey(Owner, on_delete=models.PROTECT)
     vendor = models.ForeignKey(Vendor, on_delete=models.PROTECT, related_name="orders")
     order_number = models.CharField(max_length=128, null=True, blank=True)
     created = models.DateTimeField(default=timezone.now)
@@ -221,28 +238,12 @@ class VendorOrderLine(models.Model):
     )
     quantity = models.PositiveIntegerField()
     cost = models.DecimalField(decimal_places=4, max_digits=8, help_text="per unit")
-    for_inventory = models.ForeignKey("Inventory", on_delete=models.PROTECT)
 
     def __str__(self):  # pragma: no cover
         return (
             f"{self.vendor_order.vendor} {self.vendor_order.order_number} "
             f"x{self.quantity}"
         )
-
-
-class Inventory(models.Model):
-    """
-    Container for complete stock of parts available for usage in project
-    builds.
-    """
-
-    name = models.CharField(max_length=64)
-
-    class Meta:
-        verbose_name_plural = "Inventories"
-
-    def __str__(self):  # pragma: no cover
-        return self.name
 
 
 class InventoryLine(models.Model):
@@ -252,7 +253,7 @@ class InventoryLine(models.Model):
 
     created = models.DateTimeField(default=timezone.now)
     updated = models.DateTimeField(auto_now=True)
-    inventory = models.ForeignKey(Inventory, on_delete=models.PROTECT)
+    owner = models.ForeignKey(Owner, on_delete=models.PROTECT)
     part = models.ForeignKey(
         Part, on_delete=models.PROTECT, related_name="inventory_lines"
     )
@@ -272,7 +273,7 @@ class InventoryLine(models.Model):
         inventory line (comma separated).
         """
         _item_numbers = []
-        for vendor_part in self.part.part_vendors.all():
+        for vendor_part in self.part.vendor_parts.all():
             _item_numbers.append(vendor_part.item_number)
         return ", ".join(_item_numbers)
 
@@ -341,6 +342,7 @@ class Project(models.Model):
         UNKNOWN = 0
         GITHUB = 1
 
+    owner = models.ForeignKey(Owner, on_delete=models.PROTECT)
     name = models.CharField(max_length=64)
 
     git_server = models.PositiveSmallIntegerField(
@@ -614,7 +616,7 @@ class ProjectBuildPartReservation(models.Model):
     )
     # There may be more than one inventory action per reservation, given more
     # than one inventory line represents the part and any lacks sufficient
-    # stock to complete the build alone (inventory actions cannot apply to
+    # stock to complete the build alone (inventory actions **cannot** apply to
     # more than one reservation). (InventoryActions track the ``reservation``)
 
     created = models.DateTimeField(default=timezone.now)

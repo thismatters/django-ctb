@@ -158,7 +158,9 @@ class PartSatisfactionManager:
             )
             # get inventory lines for all equivalent parts
             _inventory_lines = models.InventoryLine.objects.filter(
-                part__in=_equivalents, is_deprioritized=False
+                owner=self.project_build.project_version.project.owner,
+                part__in=_equivalents,
+                is_deprioritized=False,
             ).order_by("quantity")
             return list(_inventory_lines)
 
@@ -334,7 +336,7 @@ class ProjectBuildService:
     def _clear_to_build(self, build) -> list[models.ProjectBuildPartReservation]:
         """
         Reserves sufficient stock of parts to complete a project, or---barring
-        availability---reserves stock of parts which are pletiful enough to
+        availability---reserves stock of parts which are plentiful enough to
         complete the project build and creates shortages for those unfortunate
         parts which have low stocks (then raises an ``InsufficientInventory``
         exception).
@@ -364,7 +366,7 @@ class ProjectBuildService:
             logger.info("!! Not clear to build !!")
             logger.info("!! Lacking: ")
             for shortage in shortages:
-                _vendor_part = shortage.part.part_vendors.all().order_by("cost").first()
+                _vendor_part = shortage.part.vendor_parts.all().order_by("cost").first()
                 logger.info(f">> {shortage.part}, {shortage.quantity}")
                 if _vendor_part:
                     logger.info(

@@ -83,6 +83,42 @@ class TestProjectVersionBomServiceSync:
         assert pp.line_number == project_part.line_number
         pp.delete()
 
+    def test__sync_implicit_parts__respects_owner(
+        self,
+        project_version,
+        part,
+        part_factory,
+        project_part_factory,
+        implicit_project_part_factory,
+        owner_factory,
+        user_factory,
+    ):
+        """
+        :scenario: Implicit Project Parts with separate owners will not result
+                   in Project Parts
+
+        | GIVEN a project part references a part
+        | AND the given part's package is associated with an ImplicitProjectPart
+        | AND the associated ImplicitProjectPart has a separate owner
+        | WHEN _sync_implicit_parts is run for the project part
+        | THEN no implicit project part is created
+        """
+        implicit_part = part_factory(name="implicit part", symbol="IP")
+        project_part = project_part_factory(
+            project_version=project_version, part=part, line_number=69
+        )
+        separate_user = user_factory("bob", email="bob@test.test", password="password")
+        separate_owner = owner_factory(user=separate_user)
+        implicit_project_part_factory(
+            for_package=part.package,
+            part=implicit_part,
+            quantity=3,
+            owner=separate_owner,
+        )
+        assert m.ProjectPart.objects.filter(is_implicit=True).count() == 0
+        s.ProjectVersionBomService()._sync_implicit_parts(project_part=project_part)
+        assert m.ProjectPart.objects.filter(is_implicit=True).count() == 0
+
     def test__sync_implicit_parts__remove_old(
         self,
         project_version,
@@ -664,11 +700,11 @@ class TestProjectVersionBomServicePartSelection:
         assert len(parts) == 3
         for part in parts:
             if part == green_led:
-                assert part.qty_in_inventory == 53
+                assert part.qty_in_inventory == 53  # type: ignore
             elif part == white_led:
-                assert part.qty_in_inventory == 47
+                assert part.qty_in_inventory == 47  # type: ignore
             elif part == purple_led:
-                assert part.qty_in_inventory == 22
+                assert part.qty_in_inventory == 22  # type: ignore
 
     def test__get_matching_parts__deprioritized(
         self, part_factory, footprint, inventory_line_factory

@@ -1,5 +1,4 @@
 import datetime
-from decimal import Decimal
 
 import pytest
 from django.utils import timezone

@@ -15,7 +15,6 @@ from django_ctb.services.sync import (
 )
 
 __all__ = [
-    "InventoryLineFulfillment",
     "PartSatisfactionManager",
     "ProjectBuildPartReservationService",
     "ProjectBuildService",
