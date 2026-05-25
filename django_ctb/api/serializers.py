@@ -470,3 +470,24 @@ class ProjectBuildPartReservationSerializer(
 
 class GenericActionSerializer(serializers.Serializer):
     pass
+
+
+class FilterFieldChoiceSerializer(serializers.Serializer):
+    value = serializers.CharField(read_only=True, allow_null=True)
+    label = serializers.CharField(read_only=True)
+
+
+class FilterFieldsSerializer(serializers.Serializer):
+    field_name = serializers.CharField(read_only=True)
+    supports_exact = serializers.BooleanField(read_only=True)
+    supports_isnull = serializers.BooleanField(read_only=True)
+    options = serializers.ListField(
+        child=serializers.CharField(), read_only=True, allow_null=True
+    )
+    choice_options = FilterFieldChoiceSerializer(
+        many=True, allow_null=True, read_only=True
+    )
+
+
+class FilterMetaSerializer(serializers.Serializer):
+    filters = FilterFieldsSerializer(many=True, read_only=True)

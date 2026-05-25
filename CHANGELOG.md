@@ -3,6 +3,9 @@ Changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Added
+- Filter Meta endpoint for parts
+- Svelte frontend with pages for:
+  - Parts (with filters)
 ### Changed
 ### Removed
 ### Fixed

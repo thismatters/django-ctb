@@ -1,0 +1,6 @@
+@use "@material/theme/color-palette";
+
+$primary: #6200ee;
+$secondary: #03dac6;
+
+// ... other MDC overrides, but NEVER @use 'smui-theme'

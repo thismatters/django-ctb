@@ -2,6 +2,8 @@
 API Views for handling CRUD operations on resources
 """
 
+from dataclasses import dataclass
+from typing import Any
 from django_filters import rest_framework as filters
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
@@ -20,6 +22,12 @@ from django_ctb.tasks import (
     populate_mouser_vendor_part,
     sync_project_version,
 )
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Choices
+from django.db.models.fields.related import RelatedField
+from django.core.exceptions import FieldDoesNotExist
 
 
 class OwnedSubModelMixin:
@@ -91,6 +99,26 @@ class VendorViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
+@dataclass
+class FilterFieldChoice:
+    value: str
+    label: str
+
+
+@dataclass
+class FilterFieldMeta:
+    field_name: str
+    supports_exact: bool = False
+    supports_isnull: bool = False
+    options: list[str] | None = None
+    choice_options: list[FilterFieldChoice] | None = None
+
+
+@dataclass
+class FilterMeta:
+    filters: list[FilterFieldMeta]
+
+
 @extend_schema(tags=["Parts Library"])
 class PartViewSet(viewsets.ModelViewSet):
     """
@@ -108,11 +136,132 @@ class PartViewSet(viewsets.ModelViewSet):
     filter_backends = (filters.DjangoFilterBackend,)
     filterset_fields = {
         "name": ["exact", "contains"],
-        "value": ["exact", "contains"],
+        "value": ["exact", "contains", "isnull"],
         "unit": ["exact"],
-        "symbol": ["exact"],
+        "symbol": ["exact", "isnull"],
         "package__name": ["exact", "contains"],
+        "package__technology": ["exact"],
+        "vendors": ["exact", "isnull"],
     }
+
+    def get_queryset(self) -> Any:
+        return super().get_queryset()
+
+    @extend_schema(
+        responses={
+            200: serializers.FilterMetaSerializer,
+        }
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        serializer_class=serializers.FilterMetaSerializer,
+        url_path="filter-meta",
+    )
+    def filter_meta(self, request):
+        """
+        Retrieve the filter parameters and values for facilitating search
+        """
+        # TODO: refactor into mixin class
+        backend = DjangoFilterBackend()
+        filterset_class = backend.get_filterset_class(self, self.get_queryset())
+
+        if not filterset_class:  # pragma: nocover
+            return Response({"detail": "No filters configured"}, status=400)
+
+        metadata = {}
+        model = self.get_queryset().model
+
+        # Loop through individual filter instances
+        for param_name, filter_obj in filterset_class.base_filters.items():
+            # filtered_field_name may reference a remote field like
+            # ``part__technology``, which isn't an actual model field
+            filtered_field_name = filter_obj.field_name
+            assert filtered_field_name is not None
+            lookup = filter_obj.lookup_expr
+
+            # Skip if the lookup isn't exact or isnull
+            if lookup not in ["exact", "isnull"]:
+                continue
+
+            # Initialize field structure if it hasn't been added yet
+            if filtered_field_name not in metadata:
+                metadata[filtered_field_name] = FilterFieldMeta(
+                    field_name=filtered_field_name
+                )
+
+            # Toggle supported flags based on what the filter configuration allows
+            if lookup == "exact":
+                metadata[filtered_field_name].supports_exact = True
+            elif lookup == "isnull":
+                metadata[filtered_field_name].supports_isnull = True
+
+            # If it's an exact lookup, let's pull the real selectable options
+            field_has_options = (
+                metadata[filtered_field_name].options is not None
+                or metadata[filtered_field_name].choice_options is not None
+            )
+            if lookup == "exact" and not field_has_options:
+                print(f"lookup exact: {filtered_field_name}")
+                _model = model
+                # Identify the actual field on the remote model
+                actual_field_name = filtered_field_name
+                is_remote_field = False
+                while "__" in actual_field_name:
+                    # recurse into remote model
+                    print(f"splitting field_name {actual_field_name}")
+                    fkey_field_name, actual_field_name = actual_field_name.split(
+                        "__", maxsplit=1
+                    )
+                    _model = _model._meta.get_field(fkey_field_name).related_model
+                    is_remote_field = True
+
+                model_field = _model._meta.get_field(actual_field_name)
+
+                # Case A: Field has hardcoded choice constraints (e.g. choices=STATUS_CHOICES)
+                if getattr(model_field, "choices", None):
+                    print("Case A")
+                    metadata[filtered_field_name].choice_options = [
+                        FilterFieldChoice(value=choice[0], label=choice[1])
+                        for choice in model_field.choices
+                    ]
+
+                # Case B: Field is a relationship (ForeignKey / ManyToMany)
+                elif isinstance(model_field, RelatedField):
+                    print("Case B")
+                    related_model = model_field.related_model
+                    # Fetch related primary keys and their string representation
+                    metadata[filtered_field_name].choice_options = [
+                        FilterFieldChoice(value=obj.pk, label=str(obj[:100]))
+                        for obj in related_model.objects.all()[
+                            :500
+                        ]  # Cap it to prevent huge payloads
+                    ]
+
+                # Case C: Remote field
+                elif is_remote_field:
+                    print("Case C")
+                    print(
+                        f"Remote field with model {_model} and field {actual_field_name}"
+                    )
+                    # apply the current filter to find what options are
+                    #  available in the remote model
+                    avaliable_options = set(
+                        self.get_queryset().values_list(filtered_field_name, flat=True)
+                    )
+                    print(f"avaliable_options {avaliable_options}")
+                    metadata[filtered_field_name].options = avaliable_options
+                # Case C: Simple text/integer/boolean fields with choices defined directly
+                else:
+                    print("Case D")
+                    # lookup actual values!
+                    qs = self.get_queryset().values_list(filtered_field_name, flat=True)
+                    metadata[filtered_field_name].options = list(set(qs))
+
+        serializer = serializers.FilterMetaSerializer(
+            FilterMeta(filters=list(metadata.values()))
+        )
+        return Response(serializer.data)
 
 
 @extend_schema(tags=["Parts Library"])
